@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import Aurora from '../../components/Aurora';
+import TextType from '../components/TextType';
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -120,8 +121,16 @@ export default function LandingPage() {
           transition={{ delay: 0.1, duration: 0.4, ease: 'linear' }} className="font-bold text-center"
           style={{ color: '#E6F1EF', fontSize: 'clamp(56px, 6.5vw, 128px)', lineHeight: 1.05,
             marginBottom: 'clamp(32px, 3.5vw, 64px)', maxWidth: '1600px' }}>
-          The Distributed Systems Lab You{' '}
-          <span style={{ color: '#00FFA3', textShadow: '0 0 20px rgba(0,255,170,0.3)' }}>Control</span>
+          <TextType
+            texts={["The Distributed Systems Lab You Control", "Build Distributed Systems with Confidence", "Deploy. Monitor. Scale."]}
+            typingSpeed={120}
+            pauseDuration={1500}
+            deletingSpeed={70}
+            showCursor
+            cursorCharacter="_"
+            variableSpeedEnabled={false}
+            cursorBlinkDuration={0.5}
+          />
         </motion.h1>
 
         {/* Subheadline */}
