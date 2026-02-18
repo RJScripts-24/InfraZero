@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import Aurora from '../../components/Aurora';
+import Particles from '../components/Particles';
 import TextType from '../components/TextType';
 import TerminalOutput from '../components/TerminalOutput';
 
@@ -373,9 +374,22 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 2 — GIANT TYPOGRAPHY STATEMENT */}
-      <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
+      <section className="px-8 xl:px-12 2xl:px-16 relative z-10 overflow-hidden" 
         style={{ paddingTop: 'clamp(120px, 12vw, 220px)', paddingBottom: 'clamp(120px, 12vw, 220px)' }}>
-        <div className="mx-auto text-center" style={{ maxWidth: '1700px' }}>
+        <Particles
+          particleCount={200}
+          particleSpread={10}
+          speed={0.1}
+          particleColors={["#00ffd5"]}
+          moveParticlesOnHover={false}
+          particleHoverFactor={1.6}
+          alphaParticles={false}
+          particleBaseSize={150}
+          sizeRandomness={1.1}
+          cameraDistance={20}
+          disableRotation={false}
+        />
+        <div className="mx-auto text-center relative" style={{ maxWidth: '1700px' }}>
           <motion.h2 initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }} className="font-bold mb-16"
             style={{ color: '#E6F1EF', fontSize: 'clamp(48px, 5.2vw, 104px)', lineHeight: 1.1 }}>
