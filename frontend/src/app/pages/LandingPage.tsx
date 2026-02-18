@@ -429,25 +429,99 @@ export default function LandingPage() {
               Every node placement validated against distributed systems best practices. No hallucinations. Pure architectural reasoning.
             </p>
           </motion.div>
-          <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
-            transition={{ duration: 0.4, ease: 'linear' }} className="relative border h-96"
+          {/* AI Canvas — animated graph building */}
+          <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
+            transition={{ duration: 0.4, ease: 'linear' }} className="relative border h-96 overflow-hidden"
             style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
               backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
               backgroundSize: 'clamp(18px, 1.65vw, 28px) clamp(18px, 1.65vw, 28px)' }}>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <motion.div animate={{ boxShadow: ['0 0 0px rgba(0,255,170,0)', '0 0 30px rgba(0,255,170,0.4)', '0 0 0px rgba(0,255,170,0)'] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="border-2 flex items-center justify-center"
-                style={{ borderColor: '#00FFA3', backgroundColor: '#040F0E', width: 'clamp(140px, 13vw, 220px)', height: 'clamp(140px, 13vw, 220px)' }}>
-                <div className="text-center">
-                  <div style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(11px, 1vw, 16px)' }}>
-                    Redis
-                  </div>
-                  <div style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(9px, 0.75vw, 13px)', marginTop: '4px' }}>
-                    [Inserting...]
-                  </div>
-                </div>
-              </motion.div>
+
+            {/* Prompt bar */}
+            <div className="absolute top-0 left-0 right-0 border-b px-3 py-2 flex items-center gap-2"
+              style={{ borderColor: 'rgba(0,255,170,0.15)', backgroundColor: 'rgba(4,15,14,0.9)', fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', color: '#4A7A70' }}>
+              <span style={{ color: '#00FFA3' }}>▶</span>
+              <motion.span animate={{ opacity: [1,0.4,1] }} transition={{ duration: 1.6, repeat: Infinity }}
+                style={{ color: '#00FFA3' }}>AI</motion.span>
+              <span>&nbsp;"add Redis cache layer between API and Postgres"</span>
             </div>
+
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 340" preserveAspectRatio="xMidYMid meet" style={{ top: '32px', height: 'calc(100% - 32px)' }}>
+              <defs>
+                <filter id="sglow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                <path id="s-c-a"  d="M 200 48 L 200 105" />
+                <path id="s-a-p"  d="M 175 145 C 150 175 115 190 102 205" />
+                <path id="s-a-r"  d="M 200 145 L 200 200" />
+                <path id="s-a-cf" d="M 225 145 C 250 175 285 190 298 205" />
+              </defs>
+
+              {/* edges */}
+              <motion.path d="M 200 48 L 200 105" fill="none" stroke="rgba(0,255,170,0.25)" strokeWidth="1.5"
+                initial={{ pathLength:0 }} animate={{ pathLength:1 }} transition={{ delay:0.3, duration:0.4, ease:'linear' }}/>
+              <motion.path d="M 175 145 C 150 175 115 190 102 205" fill="none" stroke="rgba(0,255,170,0.25)" strokeWidth="1.5"
+                initial={{ pathLength:0 }} animate={{ pathLength:1 }} transition={{ delay:0.7, duration:0.45, ease:'linear' }}/>
+              <motion.path d="M 200 145 L 200 200" fill="none" stroke="rgba(0,255,170,0.55)" strokeWidth="1.5" strokeDasharray="4 3"
+                initial={{ pathLength:0 }} animate={{ pathLength:1 }} transition={{ delay:1.1, duration:0.4, ease:'linear' }}/>
+              <motion.path d="M 225 145 C 250 175 285 190 298 205" fill="none" stroke="rgba(0,255,170,0.25)" strokeWidth="1.5"
+                initial={{ pathLength:0 }} animate={{ pathLength:1 }} transition={{ delay:0.9, duration:0.45, ease:'linear' }}/>
+
+              {/* packets */}
+              <circle r="2.5" fill="#00FFA3" opacity="0.85"><animateMotion dur="1.8s" repeatCount="indefinite" begin="0.8s"><mpath href="#s-c-a"/></animateMotion></circle>
+              <circle r="2" fill="#00FFA3" opacity="0.6"><animateMotion dur="2.2s" repeatCount="indefinite" begin="1.2s"><mpath href="#s-a-p"/></animateMotion></circle>
+              <circle r="3" fill="#00FFA3" opacity="1" style={{ filter:'drop-shadow(0 0 4px #00FFA3)' }}><animateMotion dur="1.4s" repeatCount="indefinite" begin="1.6s"><mpath href="#s-a-r"/></animateMotion></circle>
+              <circle r="2" fill="#00FFA3" opacity="0.6"><animateMotion dur="2.0s" repeatCount="indefinite" begin="1.4s"><mpath href="#s-a-cf"/></animateMotion></circle>
+
+              {/* Client */}
+              <motion.g initial={{ opacity:0, y:-12 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.1, duration:0.3 }}>
+                <rect x="158" y="18" width="84" height="36" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1"/>
+                <text x="200" y="32" textAnchor="middle" fill="#4A7A70" fontSize="6.5" fontFamily="JetBrains Mono, monospace" letterSpacing="1.2">CLIENT</text>
+                <text x="200" y="46" textAnchor="middle" fill="#E6F1EF" fontSize="9.5" fontFamily="JetBrains Mono, monospace">Frontend</text>
+              </motion.g>
+
+              {/* API Gateway — glowing */}
+              <motion.g initial={{ opacity:0, scale:0.85 }} animate={{ opacity:1, scale:1 }} transition={{ delay:0.4, duration:0.3 }}>
+                <motion.rect x="150" y="100" width="100" height="50" rx="3" fill="none" stroke="rgba(0,255,170,0.15)"
+                  animate={{ opacity:[0.8,0,0.8], strokeWidth:[1,3,1] }} transition={{ duration:2.2, repeat:Infinity, ease:'easeInOut' }}/>
+                <rect x="158" y="108" width="84" height="44" rx="2" fill="#040F0E" stroke="#00FFA3" strokeWidth="1.8"
+                  style={{ filter:'drop-shadow(0 0 8px rgba(0,255,170,0.5))' }}/>
+                <text x="200" y="124" textAnchor="middle" fill="#4A7A70" fontSize="6.5" fontFamily="JetBrains Mono, monospace" letterSpacing="1.2">GATEWAY</text>
+                <text x="200" y="141" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace" fontWeight="bold">API</text>
+              </motion.g>
+
+              {/* Postgres */}
+              <motion.g initial={{ opacity:0, y:14 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.8, duration:0.3 }}>
+                <rect x="58" y="205" width="88" height="40" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1"/>
+                <text x="102" y="220" textAnchor="middle" fill="#4A7A70" fontSize="6.5" fontFamily="JetBrains Mono, monospace" letterSpacing="1.2">DATABASE</text>
+                <text x="102" y="235" textAnchor="middle" fill="#E6F1EF" fontSize="9.5" fontFamily="JetBrains Mono, monospace">Postgres</text>
+              </motion.g>
+
+              {/* Redis — AI inserting, marching ants */}
+              <motion.g initial={{ opacity:0, scale:0.88 }} animate={{ opacity:1, scale:1 }} transition={{ delay:1.2, duration:0.35 }}>
+                <motion.rect x="158" y="200" width="84" height="50" rx="2" fill="#040F0E"
+                  stroke="#00FFA3" strokeWidth="1.5" strokeDasharray="5 3"
+                  animate={{ strokeDashoffset:[0,-16] }} transition={{ duration:0.65, repeat:Infinity, ease:'linear' }}/>
+                <text x="200" y="220" textAnchor="middle" fill="#00FFA3" fontSize="10" fontFamily="JetBrains Mono, monospace" fontWeight="bold"
+                  style={{ filter:'drop-shadow(0 0 5px rgba(0,255,170,0.7))' }}>Redis</text>
+                <text x="200" y="233" textAnchor="middle" fill="#4A7A70" fontSize="6.5" fontFamily="JetBrains Mono, monospace">CACHE</text>
+                <motion.text x="200" y="244" textAnchor="middle" fill="#00FFA3" fontSize="7" fontFamily="JetBrains Mono, monospace"
+                  animate={{ opacity:[1,0.2,1] }} transition={{ duration:1.0, repeat:Infinity, ease:'easeInOut' }}>▋ inserting...</motion.text>
+              </motion.g>
+
+              {/* Cloudflare CDN */}
+              <motion.g initial={{ opacity:0, y:14 }} animate={{ opacity:1, y:0 }} transition={{ delay:1.0, duration:0.3 }}>
+                <rect x="254" y="205" width="88" height="40" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1"/>
+                <text x="298" y="220" textAnchor="middle" fill="#4A7A70" fontSize="6.5" fontFamily="JetBrains Mono, monospace" letterSpacing="1.2">CDN</text>
+                <text x="298" y="235" textAnchor="middle" fill="#E6F1EF" fontSize="9.5" fontFamily="JetBrains Mono, monospace">CloudFront</text>
+              </motion.g>
+
+              {/* status bar */}
+              <motion.g initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:1.5, duration:0.4 }}>
+                <rect x="10" y="295" width="380" height="22" rx="2" fill="rgba(0,255,170,0.04)" stroke="rgba(0,255,170,0.12)" strokeWidth="1"/>
+                <circle cx="22" cy="306" r="3.5" fill="#00FFA3" opacity="0.9"/>
+                <motion.text x="32" y="310" fill="#00FFA3" fontSize="8" fontFamily="JetBrains Mono, monospace"
+                  animate={{ opacity:[1,0.4,1] }} transition={{ duration:1.4, repeat:Infinity }}>AI generating architecture</motion.text>
+                <text x="280" y="310" fill="#4A7A70" fontSize="8" fontFamily="JetBrains Mono, monospace">4 nodes · 4 edges</text>
+              </motion.g>
+            </svg>
           </motion.div>
         </div>
       </section>
@@ -456,24 +530,85 @@ export default function LandingPage() {
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
         style={{ backgroundColor: '#020908', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto grid md:grid-cols-2 items-center gap-16" style={{ maxWidth: '1840px' }}>
-          <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
-            transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 relative h-96"
+          {/* Physics Engine — simulation metrics panel */}
+          <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
+            transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 relative h-96 border overflow-hidden"
             style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
               backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
               backgroundSize: 'clamp(18px, 1.65vw, 28px) clamp(18px, 1.65vw, 28px)' }}>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <motion.div animate={{ boxShadow: ['0 0 0px rgba(0,255,170,0)', '0 0 30px rgba(0,255,170,0.4)', '0 0 0px rgba(0,255,170,0)'] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="border-2 flex items-center justify-center"
-                style={{ borderColor: '#00FFA3', backgroundColor: '#040F0E', width: 'clamp(140px, 13vw, 220px)', height: 'clamp(140px, 13vw, 220px)' }}>
-                <div className="text-center">
-                  <div style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(11px, 1vw, 16px)' }}>
-                    Redis
+
+            {/* header bar */}
+            <div className="absolute top-0 left-0 right-0 border-b flex items-center justify-between px-3 py-2"
+              style={{ borderColor:'rgba(0,255,170,0.15)', backgroundColor:'rgba(4,15,14,0.95)', fontFamily:'JetBrains Mono, monospace', fontSize:'9px', color:'#4A7A70' }}>
+              <div className="flex items-center gap-2">
+                <motion.div animate={{ opacity:[1,0.3,1] }} transition={{ duration:0.9, repeat:Infinity }}
+                  style={{ width:6, height:6, borderRadius:'50%', backgroundColor:'#00FFA3' }}/>
+                <span style={{ color:'#00FFA3' }}>WASM SIM RUNNING</span>
+              </div>
+              <span>seed: 0xDEADBEEF</span>
+            </div>
+
+            <div className="absolute inset-0" style={{ top:'32px', padding:'14px', display:'flex', flexDirection:'column', gap:'10px', fontFamily:'JetBrains Mono, monospace' }}>
+
+              {/* request counter */}
+              <div className="flex items-center justify-between border-b pb-2" style={{ borderColor:'rgba(0,255,170,0.1)' }}>
+                <span style={{ color:'#4A7A70', fontSize:'9px', letterSpacing:'1px' }}>REQUESTS / SEC</span>
+                <motion.span animate={{ opacity:[1,0.6,1] }} transition={{ duration:0.4, repeat:Infinity }}
+                  style={{ color:'#00FFA3', fontSize:'18px', fontWeight:'bold' }}>98,432</motion.span>
+              </div>
+
+              {/* latency bars */}
+              <div style={{ fontSize:'8px', color:'#4A7A70', marginBottom:'2px', letterSpacing:'1px' }}>LATENCY DISTRIBUTION (ms)</div>
+              {[
+                { label:'p50', value:85, color:'#00FFA3' },
+                { label:'p95', value:55, color:'rgba(0,255,170,0.65)' },
+                { label:'p99', value:30, color:'rgba(0,255,170,0.35)' },
+                { label:'p999', value:12, color:'rgba(0,255,170,0.2)' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span style={{ color:'#4A7A70', fontSize:'8px', width:'28px', flexShrink:0 }}>{label}</span>
+                  <div style={{ flex:1, height:'6px', backgroundColor:'rgba(0,255,170,0.07)', borderRadius:'1px', overflow:'hidden' }}>
+                    <motion.div
+                      initial={{ width:0 }}
+                      whileInView={{ width:`${value}%` }}
+                      viewport={{ once:true }}
+                      transition={{ delay:0.4, duration:0.8, ease:'easeOut' }}
+                      style={{ height:'100%', backgroundColor:color, borderRadius:'1px' }}/>
                   </div>
-                  <div style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(9px, 0.75vw, 13px)', marginTop: '4px' }}>
-                    [Inserting...]
-                  </div>
+                  <span style={{ color:'#8FA9A3', fontSize:'8px', width:'28px', textAlign:'right' }}>
+                    {label==='p50'?'12ms':label==='p95'?'38ms':label==='p99'?'91ms':'220ms'}
+                  </span>
                 </div>
-              </motion.div>
+              ))}
+
+              {/* failure injection */}
+              <div className="border-t pt-2" style={{ borderColor:'rgba(0,255,170,0.1)' }}>
+                <div style={{ fontSize:'8px', color:'#4A7A70', letterSpacing:'1px', marginBottom:'6px' }}>FAULT INJECTION</div>
+                <div className="flex gap-2">
+                  {[
+                    { name:'API timeout', active:true },
+                    { name:'DB failover', active:false },
+                    { name:'Partition', active:true },
+                  ].map(({ name, active }) => (
+                    <div key={name} className="border px-2 py-1 flex items-center gap-1"
+                      style={{ borderColor: active ? 'rgba(0,255,170,0.5)' : 'rgba(0,255,170,0.15)',
+                        backgroundColor: active ? 'rgba(0,255,170,0.07)' : 'transparent', borderRadius:'2px' }}>
+                      <motion.div
+                        animate={{ opacity: active ? ([1, 0.2, 1] as number[]) : ([0.3, 0.3, 0.3] as number[]) }}
+                        transition={{ duration:1.1, repeat:Infinity }}
+                        style={{ width:5, height:5, borderRadius:'50%', backgroundColor:active?'#00FFA3':'#4A7A70' }}/>
+                      <span style={{ color: active?'#00FFA3':'#4A7A70', fontSize:'7.5px' }}>{name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* determinism badge */}
+              <div className="flex items-center justify-between border-t pt-2" style={{ borderColor:'rgba(0,255,170,0.1)', marginTop:'auto' }}>
+                <span style={{ color:'#4A7A70', fontSize:'8px' }}>DETERMINISTIC: same seed → same result</span>
+                <motion.span animate={{ opacity:[1,0.5,1] }} transition={{ duration:2, repeat:Infinity }}
+                  style={{ color:'#00FFA3', fontSize:'8px' }}>✓ VERIFIED</motion.span>
+              </div>
             </div>
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
