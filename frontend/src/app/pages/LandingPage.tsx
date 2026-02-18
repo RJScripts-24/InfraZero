@@ -180,67 +180,181 @@ export default function LandingPage() {
                 fontFamily: 'JetBrains Mono, monospace', color: '#8FA9A3', padding: 'clamp(12px, 1.1vw, 20px)',
                 fontSize: 'clamp(11px, 0.85vw, 15px)' }}>
                 <div style={{ color: '#00FFA3' }}>→ README.md uploaded</div>
+                <div className="mt-1" style={{ color: '#00FFA3' }}>→ Analyzing architecture requirements...</div>
                 <div className="mt-2">Prompt: "Build a Netflix-like microservices backend"</div>
+                <div className="mt-1" style={{ color: '#4A7A70' }}>↳ Generated: CloudFront · Frontend · Auth · API Gateway · Streaming · Postgres · <span style={{ color: '#00FFA3' }}>Redis ▋</span></div>
               </div>
 
-              {/* Node Graph Visualization */}
+              {/* Node Graph Visualization — Netflix-like Microservices */}
               <div className="relative border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.1)',
                 backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
                 backgroundSize: 'clamp(18px, 1.65vw, 28px) clamp(18px, 1.65vw, 28px)', height: 'clamp(400px, 38vw, 620px)' }}>
-                <svg className="w-full h-full" viewBox="0 0 500 400" preserveAspectRatio="xMidYMid meet">
-                  {/* Edges */}
-                  <line x1="100" y1="80" x2="200" y2="150" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-                  <line x1="300" y1="80" x2="200" y2="150" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-                  <line x1="200" y1="150" x2="150" y2="280" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-                  <line x1="200" y1="150" x2="350" y2="280" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-                  
-                  {/* Frontend Node */}
-                  <motion.g initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} 
+                <svg className="w-full h-full" viewBox="0 0 560 380" preserveAspectRatio="xMidYMid meet">
+                  <defs>
+                    <filter id="nodeGlow" x="-60%" y="-60%" width="220%" height="220%">
+                      <feGaussianBlur stdDeviation="3.5" result="blur" />
+                      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                    <filter id="aiGlow" x="-80%" y="-80%" width="260%" height="260%">
+                      <feGaussianBlur stdDeviation="6" result="blur" />
+                      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                    {/* Hidden paths for animateMotion */}
+                    <path id="mp-cdn-api"      d="M 75 87 C 120 140 200 165 233 180" />
+                    <path id="mp-client-api"   d="M 280 87 L 280 158" />
+                    <path id="mp-auth-api"     d="M 485 87 C 440 140 360 165 327 180" />
+                    <path id="mp-api-stream"   d="M 258 215 C 220 255 160 275 135 280" />
+                    <path id="mp-api-postgres" d="M 275 215 C 260 255 220 280 195 282" />
+                    <path id="mp-api-redis"    d="M 280 215 L 280 280" />
+                    <path id="mp-api-kafka"    d="M 302 215 C 340 255 400 275 425 280" />
+                  </defs>
+
+                  {/* ── EDGES ─────────────────────────────────────────── */}
+                  <motion.path d="M 75 87 C 120 140 200 165 233 180"
+                    fill="none" stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 0.5, duration: 0.55, ease: 'linear' }} />
+                  <motion.path d="M 280 87 L 280 158"
+                    fill="none" stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 0.6, duration: 0.35, ease: 'linear' }} />
+                  <motion.path d="M 485 87 C 440 140 360 165 327 180"
+                    fill="none" stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 0.7, duration: 0.55, ease: 'linear' }} />
+                  <motion.path d="M 258 215 C 220 255 160 275 135 280"
+                    fill="none" stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 1.15, duration: 0.45, ease: 'linear' }} />
+                  <motion.path d="M 275 215 C 260 255 220 280 195 282"
+                    fill="none" stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 1.1, duration: 0.45, ease: 'linear' }} />
+                  {/* API → Redis — brighter, AI is building this edge */}
+                  <motion.path d="M 280 215 L 280 280"
+                    fill="none" stroke="rgba(0,255,170,0.5)" strokeWidth="1.5" strokeDasharray="4 3"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 1.35, duration: 0.4, ease: 'linear' }} />
+                  <motion.path d="M 302 215 C 340 255 400 275 425 280"
+                    fill="none" stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                    initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }}
+                    transition={{ delay: 1.2, duration: 0.45, ease: 'linear' }} />
+
+                  {/* ── DATA-PACKET PARTICLES ──────────────────────────── */}
+                  <circle r="2.5" fill="#00FFA3" opacity="0.85">
+                    <animateMotion dur="2.8s" repeatCount="indefinite" begin="1.2s"><mpath href="#mp-cdn-api" /></animateMotion>
+                  </circle>
+                  <circle r="2.5" fill="#00FFA3" opacity="0.85">
+                    <animateMotion dur="1.9s" repeatCount="indefinite" begin="1.0s"><mpath href="#mp-client-api" /></animateMotion>
+                  </circle>
+                  <circle r="2.5" fill="#00FFA3" opacity="0.85">
+                    <animateMotion dur="2.4s" repeatCount="indefinite" begin="1.5s"><mpath href="#mp-auth-api" /></animateMotion>
+                  </circle>
+                  <circle r="2" fill="#00FFA3" opacity="0.6">
+                    <animateMotion dur="2.1s" repeatCount="indefinite" begin="2.2s"><mpath href="#mp-api-stream" /></animateMotion>
+                  </circle>
+                  <circle r="2" fill="#00FFA3" opacity="0.6">
+                    <animateMotion dur="2.0s" repeatCount="indefinite" begin="2.0s"><mpath href="#mp-api-postgres" /></animateMotion>
+                  </circle>
+                  {/* Brighter packet toward Redis — AI is routing here */}
+                  <circle r="3.5" fill="#00FFA3" opacity="1" style={{ filter: 'drop-shadow(0 0 4px #00FFA3)' }}>
+                    <animateMotion dur="1.6s" repeatCount="indefinite" begin="1.9s"><mpath href="#mp-api-redis" /></animateMotion>
+                  </circle>
+                  <circle r="2" fill="#00FFA3" opacity="0.6">
+                    <animateMotion dur="2.3s" repeatCount="indefinite" begin="2.5s"><mpath href="#mp-api-kafka" /></animateMotion>
+                  </circle>
+
+                  {/* ── ROW 1: CLIENT / CDN / AUTH ────────────────────── */}
+
+                  {/* CDN Node */}
+                  <motion.g initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6, duration: 0.3, ease: 'linear' }}>
+                    <rect x="35" y="35" width="80" height="52" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1" />
+                    <text x="75" y="57" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">CDN</text>
+                    <text x="75" y="75" textAnchor="middle" fill="#E6F1EF" fontSize="10.5" fontFamily="JetBrains Mono, monospace">CloudFront</text>
+                  </motion.g>
+
+                  {/* Frontend Client Node */}
+                  <motion.g initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.7, duration: 0.3, ease: 'linear' }}>
-                    <rect x="60" y="50" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                    <text x="100" y="85" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                      Frontend
-                    </text>
+                    <rect x="240" y="35" width="80" height="52" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1" />
+                    <text x="280" y="57" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">CLIENT</text>
+                    <text x="280" y="75" textAnchor="middle" fill="#E6F1EF" fontSize="10.5" fontFamily="JetBrains Mono, monospace">Frontend</text>
                   </motion.g>
 
                   {/* Auth Node */}
-                  <motion.g initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} 
+                  <motion.g initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.8, duration: 0.3, ease: 'linear' }}>
-                    <rect x="260" y="50" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                    <text x="300" y="85" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                      Auth
-                    </text>
+                    <rect x="445" y="35" width="80" height="52" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1" />
+                    <text x="485" y="57" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">SERVICE</text>
+                    <text x="485" y="75" textAnchor="middle" fill="#E6F1EF" fontSize="10.5" fontFamily="JetBrains Mono, monospace">Auth</text>
                   </motion.g>
 
-                  {/* API Node - Active/Selected */}
-                  <motion.g initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} 
-                    transition={{ delay: 0.9, duration: 0.3, ease: 'linear' }}>
-                    <rect x="160" y="120" width="80" height="60" fill="#040F0E" stroke="#00FFA3" strokeWidth="2" 
-                      style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,170,0.4))' }} />
-                    <text x="200" y="155" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                      API
-                    </text>
+                  {/* ── ROW 2: API GATEWAY (central, glowing) ─────────── */}
+                  <motion.g initial={{ opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.95, duration: 0.35, ease: 'linear' }}>
+                    {/* Outer pulse ring */}
+                    <motion.rect x="224" y="149" width="112" height="66" rx="4" fill="none"
+                      stroke="rgba(0,255,170,0.18)" strokeWidth="1"
+                      animate={{ opacity: [0.7, 0, 0.7], strokeWidth: [1, 3.5, 1] }}
+                      transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }} />
+                    <rect x="233" y="158" width="94" height="57" rx="2" fill="#040F0E" stroke="#00FFA3" strokeWidth="2"
+                      style={{ filter: 'drop-shadow(0 0 10px rgba(0,255,170,0.55))' }} />
+                    <text x="280" y="180" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">GATEWAY</text>
+                    <text x="280" y="201" textAnchor="middle" fill="#00FFA3" fontSize="13" fontFamily="JetBrains Mono, monospace" fontWeight="bold">API</text>
                   </motion.g>
 
-                  {/* Database Node */}
-                  <motion.g initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
-                    transition={{ delay: 1.0, duration: 0.3, ease: 'linear' }}>
-                    <rect x="110" y="250" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                    <text x="150" y="285" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                      Database
-                    </text>
-                  </motion.g>
+                  {/* ── ROW 3: STREAMING / POSTGRES / REDIS / KAFKA ───── */}
 
-                  {/* Redis Node (AI inserting) */}
-                  <motion.g initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
+                  {/* Streaming Service */}
+                  <motion.g initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 1.1, duration: 0.3, ease: 'linear' }}>
-                    <rect x="310" y="250" width="80" height="60" fill="#040F0E" stroke="#00FFA3" strokeWidth="2" strokeDasharray="4,4" />
-                    <text x="350" y="285" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                      Redis
-                    </text>
-                    <text x="350" y="300" textAnchor="middle" fill="#00FFA3" fontSize="8" fontFamily="JetBrains Mono, monospace" opacity="0.7">
-                      [AI inserting...]
-                    </text>
+                    <rect x="45" y="280" width="90" height="52" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1" />
+                    <text x="90" y="301" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">ENGINE</text>
+                    <text x="90" y="319" textAnchor="middle" fill="#E6F1EF" fontSize="10.5" fontFamily="JetBrains Mono, monospace">Streaming</text>
+                  </motion.g>
+
+                  {/* Postgres Node */}
+                  <motion.g initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.15, duration: 0.3, ease: 'linear' }}>
+                    <rect x="150" y="280" width="90" height="52" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1" />
+                    <text x="195" y="301" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">DATABASE</text>
+                    <text x="195" y="319" textAnchor="middle" fill="#E6F1EF" fontSize="10.5" fontFamily="JetBrains Mono, monospace">Postgres</text>
+                  </motion.g>
+
+                  {/* Redis Cache — AI is inserting this node */}
+                  <motion.g initial={{ opacity: 0, scale: 0.88 }} animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 1.4, duration: 0.35, ease: 'linear' }}>
+                    {/* Marching-ant border */}
+                    <motion.rect x="235" y="280" width="90" height="52" rx="2" fill="#040F0E"
+                      stroke="#00FFA3" strokeWidth="1.5" strokeDasharray="5 3"
+                      animate={{ strokeDashoffset: [0, -16] }}
+                      transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }} />
+                    <text x="280" y="301" textAnchor="middle" fill="#00FFA3" fontSize="10.5" fontFamily="JetBrains Mono, monospace" fontWeight="bold"
+                      style={{ filter: 'drop-shadow(0 0 6px rgba(0,255,170,0.7))' }}>Redis</text>
+                    <motion.text x="280" y="318" textAnchor="middle" fill="#00FFA3" fontSize="7.5" fontFamily="JetBrains Mono, monospace"
+                      animate={{ opacity: [1, 0.25, 1] }}
+                      transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}>
+                      ▋ AI inserting...
+                    </motion.text>
+                  </motion.g>
+
+                  {/* Kafka Node */}
+                  <motion.g initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.25, duration: 0.3, ease: 'linear' }}>
+                    <rect x="425" y="280" width="90" height="52" rx="2" fill="#040F0E" stroke="rgba(0,255,170,0.35)" strokeWidth="1" />
+                    <text x="470" y="301" textAnchor="middle" fill="#4A7A70" fontSize="7" fontFamily="JetBrains Mono, monospace" letterSpacing="1.5">QUEUE</text>
+                    <text x="470" y="319" textAnchor="middle" fill="#E6F1EF" fontSize="10.5" fontFamily="JetBrains Mono, monospace">Kafka</text>
+                  </motion.g>
+
+                  {/* ── LEGEND ────────────────────────────────────────── */}
+                  <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.7, duration: 0.4 }}>
+                    <circle cx="42" cy="355" r="3.5" fill="#00FFA3" opacity="0.9" />
+                    <text x="52" y="359" fill="#4A7A70" fontSize="8" fontFamily="JetBrains Mono, monospace">data flow</text>
+                    <rect x="120" y="350" width="14" height="9" rx="1" fill="none" stroke="#00FFA3" strokeWidth="1.2" strokeDasharray="3 2" />
+                    <text x="140" y="359" fill="#4A7A70" fontSize="8" fontFamily="JetBrains Mono, monospace">AI generating</text>
+                    <rect x="248" y="350" width="14" height="9" rx="1" fill="none" stroke="#00FFA3" strokeWidth="1.8" />
+                    <text x="268" y="359" fill="#4A7A70" fontSize="8" fontFamily="JetBrains Mono, monospace">active node</text>
                   </motion.g>
                 </svg>
               </div>
