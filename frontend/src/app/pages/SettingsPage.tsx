@@ -29,7 +29,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#061B1A', fontFamily: 'Inter, sans-serif' }}>
+    <div className="min-h-screen" style={{ backgroundColor: '#020908', fontFamily: 'Inter, sans-serif' }}>
       {/* Vertical Grid Overlay */}
       <div
         className="fixed inset-0 pointer-events-none"
@@ -77,7 +77,7 @@ export default function SettingsPage() {
           transition={{ duration: 0.3, ease: 'linear', delay: 0.1 }}
           className="mb-8 border p-6"
           style={{
-            backgroundColor: '#0B2321',
+            backgroundColor: '#040F0E',
             borderColor: 'rgba(0,255,170,0.2)',
             borderRadius: '4px',
           }}
@@ -111,7 +111,7 @@ export default function SettingsPage() {
               placeholder="Enter your full name"
               className="w-full px-4 py-3 border transition-colors outline-none"
               style={{
-                backgroundColor: '#061B1A',
+                backgroundColor: '#020908',
                 borderColor: 'rgba(0,255,170,0.25)',
                 color: '#E6F1EF',
                 borderRadius: '2px',
@@ -136,7 +136,7 @@ export default function SettingsPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 border transition-colors outline-none"
               style={{
-                backgroundColor: '#061B1A',
+                backgroundColor: '#020908',
                 borderColor: 'rgba(0,255,170,0.25)',
                 color: '#E6F1EF',
                 borderRadius: '2px',
@@ -179,7 +179,7 @@ export default function SettingsPage() {
               className="flex items-center gap-2 px-5 py-3 transition-all"
               style={{
                 backgroundColor: '#00FFA3',
-                color: '#061B1A',
+                color: '#020908',
                 borderRadius: '2px',
                 fontSize: '13px',
                 fontWeight: 600,
@@ -208,7 +208,7 @@ export default function SettingsPage() {
           transition={{ duration: 0.3, ease: 'linear', delay: 0.2 }}
           className="mb-8 border p-6"
           style={{
-            backgroundColor: '#0B2321',
+            backgroundColor: '#040F0E',
             borderColor: 'rgba(0,255,170,0.2)',
             borderRadius: '4px',
           }}
@@ -242,7 +242,7 @@ export default function SettingsPage() {
                 style={{
                   backgroundColor: theme === 'dark' ? '#00FFA3' : 'transparent',
                   borderColor: theme === 'dark' ? '#00FFA3' : 'rgba(0,255,170,0.3)',
-                  color: theme === 'dark' ? '#061B1A' : '#8FA9A3',
+                  color: theme === 'dark' ? '#020908' : '#8FA9A3',
                   borderRadius: '2px',
                   fontSize: '13px',
                   fontWeight: 600,
@@ -256,7 +256,7 @@ export default function SettingsPage() {
                 style={{
                   backgroundColor: theme === 'light' ? '#00FFA3' : 'transparent',
                   borderColor: theme === 'light' ? '#00FFA3' : 'rgba(0,255,170,0.3)',
-                  color: theme === 'light' ? '#061B1A' : '#8FA9A3',
+                  color: theme === 'light' ? '#020908' : '#8FA9A3',
                   borderRadius: '2px',
                   fontSize: '13px',
                   fontWeight: 600,
@@ -302,7 +302,7 @@ export default function SettingsPage() {
                 height: '24px',
                 borderColor: 'rgba(0,255,170,0.3)',
                 borderRadius: '12px',
-                backgroundColor: '#061B1A',
+                backgroundColor: '#020908',
               }}
             >
               <motion.div
@@ -329,7 +329,7 @@ export default function SettingsPage() {
           transition={{ duration: 0.3, ease: 'linear', delay: 0.3 }}
           className="mb-8 border p-6"
           style={{
-            backgroundColor: '#0B2321',
+            backgroundColor: '#040F0E',
             borderColor: 'rgba(0,255,170,0.2)',
             borderRadius: '4px',
           }}
@@ -437,7 +437,7 @@ export default function SettingsPage() {
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#FF3B3B';
-                e.currentTarget.style.color = '#061B1A';
+                e.currentTarget.style.color = '#020908';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'transparent';
@@ -472,7 +472,7 @@ export default function SettingsPage() {
       {showClearConfirm && (
         <div
           className="fixed inset-0 flex items-center justify-center z-50"
-          style={{ backgroundColor: 'rgba(6, 27, 26, 0.95)' }}
+          style={{ backgroundColor: 'rgba(2, 9, 8, 0.95)' }}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -480,7 +480,7 @@ export default function SettingsPage() {
             transition={{ duration: 0.2, ease: 'linear' }}
             className="border p-8"
             style={{
-              backgroundColor: '#0B2321',
+              backgroundColor: '#040F0E',
               borderColor: '#FF3B3B',
               borderRadius: '4px',
               maxWidth: '480px',
@@ -511,7 +511,7 @@ export default function SettingsPage() {
                   fontSize: '13px',
                   fontWeight: 600,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#0F2E2B')}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#071512')}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
                 Cancel
@@ -529,7 +529,7 @@ export default function SettingsPage() {
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = '#FF3B3B';
-                  e.currentTarget.style.color = '#061B1A';
+                  e.currentTarget.style.color = '#020908';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';

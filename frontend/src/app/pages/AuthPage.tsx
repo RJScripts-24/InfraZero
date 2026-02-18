@@ -7,7 +7,7 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex" style={{ 
-      backgroundColor: '#061B1A',
+      backgroundColor: '#020908',
       fontFamily: 'Inter, sans-serif'
     }}>
       {/* Vertical Grid Lines Overlay */}
@@ -23,7 +23,7 @@ export default function AuthPage() {
         transition={{ duration: 0.4, ease: 'linear' }}
         className="hidden lg:flex lg:w-[55%] relative flex-col justify-between"
         style={{ 
-          backgroundColor: '#0B2321',
+          backgroundColor: '#040F0E',
           padding: 'clamp(48px, 4vw, 80px)'
         }}
       >
@@ -101,42 +101,42 @@ export default function AuthPage() {
 
               {/* Nodes */}
               <g>
-                <rect x="110" y="70" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                <rect x="110" y="70" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                 <text x="150" y="105" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                   Frontend
                 </text>
               </g>
 
               <g>
-                <rect x="410" y="70" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                <rect x="410" y="70" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                 <text x="450" y="105" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                   Auth
                 </text>
               </g>
 
               <g>
-                <rect x="260" y="150" width="80" height="60" fill="#0B2321" stroke="#00FFA3" strokeWidth="2" />
+                <rect x="260" y="150" width="80" height="60" fill="#040F0E" stroke="#00FFA3" strokeWidth="2" />
                 <text x="300" y="185" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace">
                   API
                 </text>
               </g>
 
               <g>
-                <rect x="160" y="290" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                <rect x="160" y="290" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                 <text x="200" y="325" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                   Database
                 </text>
               </g>
 
               <g>
-                <rect x="360" y="290" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                <rect x="360" y="290" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                 <text x="400" y="325" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                   Cache
                 </text>
               </g>
 
               <g>
-                <rect x="260" y="370" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                <rect x="260" y="370" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                 <text x="300" y="405" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                   Queue
                 </text>
@@ -223,7 +223,7 @@ export default function AuthPage() {
         transition={{ duration: 0.4, ease: 'linear', delay: 0.2 }}
         className="flex-1 flex items-center justify-center relative"
         style={{ 
-          backgroundColor: '#061B1A',
+          backgroundColor: '#020908',
           padding: 'clamp(24px, 3vw, 48px)'
         }}
       >
@@ -260,7 +260,7 @@ export default function AuthPage() {
               transition={{ duration: 0.3, ease: 'linear', delay: 0.4 }}
               className="w-full flex items-center justify-center border transition-all"
               style={{
-                backgroundColor: '#0B2321',
+                backgroundColor: '#040F0E',
                 borderColor: 'rgba(0,255,170,0.3)',
                 padding: 'clamp(14px, 1.2vw, 18px)',
                 borderRadius: '2px',
@@ -270,11 +270,11 @@ export default function AuthPage() {
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#00FFA3';
-                e.currentTarget.style.backgroundColor = '#0F2E2B';
+                e.currentTarget.style.backgroundColor = '#071512';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
-                e.currentTarget.style.backgroundColor = '#0B2321';
+                e.currentTarget.style.backgroundColor = '#040F0E';
               }}
               onClick={() => {
                 // Handle GitHub OAuth
@@ -291,7 +291,7 @@ export default function AuthPage() {
               transition={{ duration: 0.3, ease: 'linear', delay: 0.48 }}
               className="w-full flex items-center justify-center border transition-all"
               style={{
-                backgroundColor: '#0B2321',
+                backgroundColor: '#040F0E',
                 borderColor: 'rgba(0,255,170,0.3)',
                 padding: 'clamp(14px, 1.2vw, 18px)',
                 borderRadius: '2px',
@@ -301,11 +301,11 @@ export default function AuthPage() {
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#00FFA3';
-                e.currentTarget.style.backgroundColor = '#0F2E2B';
+                e.currentTarget.style.backgroundColor = '#071512';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
-                e.currentTarget.style.backgroundColor = '#0B2321';
+                e.currentTarget.style.backgroundColor = '#040F0E';
               }}
               onClick={() => {
                 // Handle Google OAuth
@@ -360,7 +360,7 @@ export default function AuthPage() {
             transition={{ duration: 0.3, ease: 'linear', delay: 0.56 }}
             className="border mb-6"
             style={{
-              backgroundColor: '#0B2321',
+              backgroundColor: '#040F0E',
               borderColor: 'rgba(0,255,170,0.2)',
               padding: 'clamp(16px, 1.4vw, 24px)',
               borderRadius: '2px'

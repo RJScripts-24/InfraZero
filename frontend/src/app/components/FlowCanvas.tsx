@@ -20,7 +20,7 @@ const handleStyle = {
   background: '#00FFA3',
   width: 8,
   height: 8,
-  border: '2px solid #0B2321',
+  border: '2px solid #040F0E',
 };
 
 const CustomNode = memo(({ data }: { data: any }) => {
@@ -32,7 +32,7 @@ const CustomNode = memo(({ data }: { data: any }) => {
     <div
       className="border"
       style={{
-        backgroundColor: '#0B2321',
+        backgroundColor: '#040F0E',
         borderColor: data.selected ? '#00FFA3' : 'rgba(0,255,170,0.25)',
         borderWidth: data.selected ? '2px' : '1px',
         padding: '12px 16px',
@@ -112,15 +112,15 @@ export const FlowCanvas = memo(({
       <Background gap={16} size={1} color="rgba(0,255,170,0.06)" />
       <Controls
         style={{
-          backgroundColor: '#0B2321',
+          backgroundColor: '#040F0E',
           border: '1px solid rgba(0,255,170,0.2)',
         }}
       />
       <MiniMap
         nodeColor={() => '#00FFA3'}
-        maskColor="rgba(6,27,26,0.8)"
+        maskColor="rgba(2,9,8,0.8)"
         style={{
-          backgroundColor: '#0B2321',
+          backgroundColor: '#040F0E',
           border: '1px solid rgba(0,255,170,0.2)',
         }}
       />

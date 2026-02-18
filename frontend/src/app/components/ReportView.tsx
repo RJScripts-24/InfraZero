@@ -33,7 +33,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return (
       <div
         style={{
-          backgroundColor: '#061B1A',
+          backgroundColor: '#020908',
           border: '1px solid rgba(0,255,170,0.3)',
           borderRadius: '2px',
           padding: '8px 12px',
@@ -73,7 +73,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3, ease: 'linear' }}
             className="fixed inset-0 z-50"
-            style={{ backgroundColor: 'rgba(6, 27, 26, 0.95)' }}
+            style={{ backgroundColor: 'rgba(2, 9, 8, 0.95)' }}
           >
             {/* Grid overlay */}
             <div
@@ -155,7 +155,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                   transition={{ duration: 0.3, ease: 'linear', delay: 0.2 }}
                   className="mb-12 border p-8"
                   style={{
-                    backgroundColor: '#0B2321',
+                    backgroundColor: '#040F0E',
                     borderColor: 'rgba(0,255,170,0.25)',
                     borderRadius: '4px',
                   }}
@@ -321,7 +321,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                   <div
                     className="border p-6"
                     style={{
-                      backgroundColor: '#0B2321',
+                      backgroundColor: '#040F0E',
                       borderColor: 'rgba(0,255,170,0.2)',
                       borderRadius: '4px',
                     }}
@@ -406,7 +406,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                   <div
                     className="border p-6"
                     style={{
-                      backgroundColor: '#0B2321',
+                      backgroundColor: '#040F0E',
                       borderColor: 'rgba(0,255,170,0.2)',
                       borderRadius: '4px',
                     }}
@@ -454,7 +454,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                           className="border px-6 py-4"
                           style={{
                             borderColor: 'rgba(0,255,170,0.3)',
-                            backgroundColor: '#061B1A',
+                            backgroundColor: '#020908',
                             borderRadius: '2px',
                           }}
                         >
@@ -479,7 +479,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                           className="border px-6 py-4"
                           style={{
                             borderColor: 'rgba(0,255,170,0.3)',
-                            backgroundColor: '#061B1A',
+                            backgroundColor: '#020908',
                             borderRadius: '2px',
                           }}
                         >
@@ -575,7 +575,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = '#00FFA3';
-                        e.currentTarget.style.backgroundColor = '#0F2E2B';
+                        e.currentTarget.style.backgroundColor = '#071512';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
@@ -591,7 +591,7 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                       className="flex items-center gap-2 px-5 py-3 transition-all"
                       style={{
                         backgroundColor: '#00FFA3',
-                        color: '#061B1A',
+                        color: '#020908',
                         borderRadius: '2px',
                         fontSize: '13px',
                         fontWeight: 600,

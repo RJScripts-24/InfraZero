@@ -69,7 +69,7 @@ export default function DashboardPage() {
   const navItems = ['My Projects', 'Shared with Me', 'Library of Doom', 'Settings'];
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#061B1A', fontFamily: 'Inter, sans-serif' }}>
+    <div className="min-h-screen flex" style={{ backgroundColor: '#020908', fontFamily: 'Inter, sans-serif' }}>
       {/* Vertical Grid Overlay */}
       <div className="fixed inset-0 pointer-events-none" style={{
         backgroundImage: 'repeating-linear-gradient(to right, rgba(0,255,170,0.06) 0px, rgba(0,255,170,0.06) 1px, transparent 1px, transparent 80px)',
@@ -82,7 +82,7 @@ export default function DashboardPage() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.3, ease: 'linear' }}
         className="relative z-10"
-        style={{ width: '260px', backgroundColor: '#0B2321', borderRight: '1px solid rgba(0,255,170,0.15)' }}
+        style={{ width: '260px', backgroundColor: '#040F0E', borderRight: '1px solid rgba(0,255,170,0.15)' }}
       >
         <div className="h-screen flex flex-col">
           {/* User Profile Block */}
@@ -90,11 +90,11 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3 border p-3" style={{ borderColor: 'rgba(0,255,170,0.2)', borderRadius: '2px' }}>
               <div className="relative">
                 <div className="rounded-full flex items-center justify-center border" 
-                  style={{ width: '40px', height: '40px', borderColor: 'rgba(0,255,170,0.3)', backgroundColor: '#061B1A' }}>
+                  style={{ width: '40px', height: '40px', borderColor: 'rgba(0,255,170,0.3)', backgroundColor: '#020908' }}>
                   <span style={{ color: '#00FFA3', fontSize: '16px' }}>G</span>
                 </div>
                 <div className="absolute bottom-0 right-0 rounded-full" 
-                  style={{ width: '10px', height: '10px', backgroundColor: '#00FFA3', border: '2px solid #0B2321' }}></div>
+                  style={{ width: '10px', height: '10px', backgroundColor: '#00FFA3', border: '2px solid #040F0E' }}></div>
               </div>
               <div className="flex-1">
                 <div style={{ color: '#E6F1EF', fontSize: '14px', fontWeight: 500 }}>Guest User</div>
@@ -123,7 +123,7 @@ export default function DashboardPage() {
                 className="w-full text-left px-6 py-3 transition-all relative"
                 style={{
                   color: activeNav === item ? '#00FFA3' : '#8FA9A3',
-                  backgroundColor: activeNav === item ? '#0F2E2B' : 'transparent',
+                  backgroundColor: activeNav === item ? '#071512' : 'transparent',
                   fontSize: '14px',
                   fontWeight: 500
                 }}
@@ -196,7 +196,7 @@ export default function DashboardPage() {
               className="flex items-center gap-2 transition-all"
               style={{ 
                 backgroundColor: '#00FFA3', 
-                color: '#061B1A', 
+                color: '#020908', 
                 padding: '14px 28px', 
                 borderRadius: '4px',
                 fontSize: '14px',
@@ -217,7 +217,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.3, ease: 'linear' }}
             className="border mb-12 p-8"
-            style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '4px' }}
+            style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '4px' }}
           >
             <h2 className="mb-2" style={{ color: '#E6F1EF', fontSize: '22px', fontWeight: 600 }}>
               Join Live Session
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                 placeholder="https://infrazero.dev/invite/..."
                 className="flex-1 border transition-all px-4 py-3"
                 style={{
-                  backgroundColor: '#061B1A',
+                  backgroundColor: '#020908',
                   borderColor: 'rgba(0,255,170,0.3)',
                   color: '#E6F1EF',
                   fontFamily: 'JetBrains Mono, monospace',
@@ -247,7 +247,7 @@ export default function DashboardPage() {
               <button className="transition-all uppercase tracking-wider"
                 style={{
                   backgroundColor: '#00FFA3',
-                  color: '#061B1A',
+                  color: '#020908',
                   padding: '12px 32px',
                   borderRadius: '2px',
                   fontSize: '14px',
@@ -283,7 +283,7 @@ export default function DashboardPage() {
                   transition={{ delay: 0.4 + index * 0.08, duration: 0.3, ease: 'linear' }}
                   className="border cursor-pointer group relative transition-all"
                   style={{
-                    backgroundColor: '#0B2321',
+                    backgroundColor: '#040F0E',
                     borderColor: 'rgba(0,255,170,0.2)',
                     borderRadius: '2px'
                   }}
@@ -300,7 +300,7 @@ export default function DashboardPage() {
                   <div className="relative border-b" 
                     style={{ 
                       height: '180px', 
-                      backgroundColor: '#061B1A', 
+                      backgroundColor: '#020908', 
                       borderColor: 'rgba(0,255,170,0.1)',
                       backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
                       backgroundSize: '16px 16px'
@@ -311,10 +311,10 @@ export default function DashboardPage() {
                       <line x1="220" y1="60" x2="150" y2="90" stroke="rgba(0,255,170,0.3)" strokeWidth="1.5" />
                       <line x1="150" y1="90" x2="150" y2="130" stroke="rgba(0,255,170,0.3)" strokeWidth="1.5" />
                       
-                      <rect x="60" y="50" width="40" height="20" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                      <rect x="200" y="50" width="40" height="20" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                      <rect x="130" y="80" width="40" height="20" fill="#0B2321" stroke="#00FFA3" strokeWidth="1.5" />
-                      <rect x="130" y="120" width="40" height="20" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                      <rect x="60" y="50" width="40" height="20" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                      <rect x="200" y="50" width="40" height="20" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                      <rect x="130" y="80" width="40" height="20" fill="#040F0E" stroke="#00FFA3" strokeWidth="1.5" />
+                      <rect x="130" y="120" width="40" height="20" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                       
                       {/* Animated dots */}
                       <motion.circle r="2" fill="#00FFA3"
@@ -327,7 +327,7 @@ export default function DashboardPage() {
                     {/* Grade/Status Badge */}
                     <div className="absolute top-3 right-3 px-2 py-1" 
                       style={{ 
-                        backgroundColor: '#0B2321', 
+                        backgroundColor: '#040F0E', 
                         borderColor: project.grade ? '#00FFA3' : '#8FA9A3',
                         border: '1px solid',
                         borderRadius: '2px',
@@ -341,19 +341,19 @@ export default function DashboardPage() {
                     {/* Quick Actions (Hover Reveal) */}
                     <div className="absolute top-3 left-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="p-1.5 border transition-colors" 
-                        style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
+                        style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
                         <Play style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
                       </button>
                       <button className="p-1.5 border transition-colors" 
-                        style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
+                        style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
                         <FileText style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
                       </button>
                       <button className="p-1.5 border transition-colors" 
-                        style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
+                        style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
                         onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
                         <MoreVertical style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
@@ -403,7 +403,7 @@ export default function DashboardPage() {
               <button className="transition-all uppercase tracking-wider"
                 style={{
                   backgroundColor: '#00FFA3',
-                  color: '#061B1A',
+                  color: '#020908',
                   padding: '16px 40px',
                   borderRadius: '4px',
                   fontSize: '14px',

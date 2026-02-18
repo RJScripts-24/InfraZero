@@ -124,7 +124,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2, ease: 'linear' }}
             className="fixed inset-0 z-40"
-            style={{ backgroundColor: 'rgba(6, 27, 26, 0.8)' }}
+            style={{ backgroundColor: 'rgba(2, 9, 8, 0.8)' }}
             onClick={onClose}
           />
 
@@ -151,7 +151,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
               y: '-50%',
               width: '450px',
               maxHeight: '70vh',
-              backgroundColor: '#0F2E2B',
+              backgroundColor: '#071512',
               borderColor: 'rgba(0,255,170,0.25)',
               borderRadius: '2px',
               cursor: 'move',
@@ -191,7 +191,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
                 <div
                   className="border-dashed border-2 p-8 text-center cursor-pointer transition-all"
                   style={{
-                    backgroundColor: '#061B1A',
+                    backgroundColor: '#020908',
                     borderColor: 'rgba(0,255,170,0.4)',
                     borderRadius: '2px',
                   }}
@@ -204,7 +204,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.borderColor = 'rgba(0,255,170,0.4)';
-                    e.currentTarget.style.backgroundColor = '#061B1A';
+                    e.currentTarget.style.backgroundColor = '#020908';
                   }}
                 >
                   <Upload size={32} style={{ color: '#00FFA3', margin: '0 auto 12px' }} />
@@ -226,7 +226,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
 
               {/* Error State */}
               {hasError && (
-                <div className="border p-4" style={{ backgroundColor: '#061B1A', borderColor: '#FF3B3B', borderRadius: '2px' }}>
+                <div className="border p-4" style={{ backgroundColor: '#020908', borderColor: '#FF3B3B', borderRadius: '2px' }}>
                   <p style={{ color: '#FF3B3B', fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>
                     Unable to detect structured topology.
                   </p>
@@ -240,7 +240,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
               {uploadedFile && previewUrl && !hasError && (
                 <div className="space-y-4">
                   {/* Preview */}
-                  <div className="relative border" style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px', padding: '12px' }}>
+                  <div className="relative border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px', padding: '12px' }}>
                     <img
                       src={previewUrl}
                       alt="Diagram preview"
@@ -250,7 +250,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
                       <div
                         className="absolute top-4 right-4 px-2 py-1"
                         style={{
-                          backgroundColor: 'rgba(6,27,26,0.95)',
+                          backgroundColor: 'rgba(2,9,8,0.95)',
                           border: '1px solid rgba(0,255,170,0.3)',
                           borderRadius: '2px',
                         }}
@@ -264,7 +264,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
 
                   {/* Extraction Summary */}
                   {!isProcessing && (
-                    <div className="border p-4" style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px' }}>
+                    <div className="border p-4" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px' }}>
                       <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
                         <p style={{ color: '#8FA9A3', marginBottom: '8px' }}>Detected Nodes:</p>
                         <div className="space-y-1 mb-4">
@@ -317,7 +317,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
                               <select
                                 className="w-full border px-3 py-2 outline-none"
                                 style={{
-                                  backgroundColor: '#061B1A',
+                                  backgroundColor: '#020908',
                                   borderColor: 'rgba(0,255,170,0.25)',
                                   color: '#E6F1EF',
                                   fontSize: '12px',
@@ -391,8 +391,8 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
                 disabled={!uploadedFile || isProcessing}
                 className="px-4 py-2 flex items-center gap-2 transition-all"
                 style={{
-                  backgroundColor: uploadedFile && !isProcessing ? '#00FFA3' : '#0B2321',
-                  color: uploadedFile && !isProcessing ? '#061B1A' : '#8FA9A3',
+                  backgroundColor: uploadedFile && !isProcessing ? '#00FFA3' : '#040F0E',
+                  color: uploadedFile && !isProcessing ? '#020908' : '#8FA9A3',
                   borderRadius: '2px',
                   fontSize: '13px',
                   fontWeight: 600,

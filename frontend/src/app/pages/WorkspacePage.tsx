@@ -213,7 +213,7 @@ export default function WorkspacePage() {
   };
 
   return (
-    <div className="h-screen flex flex-col" style={{ backgroundColor: '#061B1A', fontFamily: 'Inter, sans-serif' }}>
+    <div className="h-screen flex flex-col" style={{ backgroundColor: '#020908', fontFamily: 'Inter, sans-serif' }}>
       {/* Grid overlay */}
       <div
         className="fixed inset-0 pointer-events-none"
@@ -231,7 +231,7 @@ export default function WorkspacePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: 'linear' }}
         className="border-b relative z-10"
-        style={{ height: '64px', backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.15)' }}
+        style={{ height: '64px', backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.15)' }}
       >
         <div className="h-full px-6 flex items-center justify-between">
           {/* Left */}
@@ -276,7 +276,7 @@ export default function WorkspacePage() {
           {/* Center */}
           <div
             className="flex border"
-            style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px' }}
+            style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px' }}
           >
             {(['edit', 'sim'] as const).map((m) => (
               <button
@@ -285,7 +285,7 @@ export default function WorkspacePage() {
                 className="px-6 py-2 transition-all"
                 style={{
                   backgroundColor: mode === m ? '#00FFA3' : 'transparent',
-                  color: mode === m ? '#061B1A' : '#8FA9A3',
+                  color: mode === m ? '#020908' : '#8FA9A3',
                   fontSize: '13px',
                   fontWeight: 500,
                 }}
@@ -302,12 +302,12 @@ export default function WorkspacePage() {
                 <div
                   key={i}
                   className="relative rounded-full border-2 flex items-center justify-center"
-                  style={{ width: '32px', height: '32px', backgroundColor: '#0B2321', borderColor: '#00FFA3', color: '#00FFA3', fontSize: '12px' }}
+                  style={{ width: '32px', height: '32px', backgroundColor: '#040F0E', borderColor: '#00FFA3', color: '#00FFA3', fontSize: '12px' }}
                 >
                   {u}
                   <div
                     className="absolute bottom-0 right-0 rounded-full border-2"
-                    style={{ width: '8px', height: '8px', backgroundColor: '#00FFA3', borderColor: '#0B2321' }}
+                    style={{ width: '8px', height: '8px', backgroundColor: '#00FFA3', borderColor: '#040F0E' }}
                   />
                 </div>
               ))}
@@ -327,7 +327,7 @@ export default function WorkspacePage() {
             <button
               onClick={handleDeployTest}
               className="flex items-center gap-2 px-5 py-2 transition-all"
-              style={{ backgroundColor: '#00FFA3', color: '#061B1A', borderRadius: '2px', fontSize: '13px', fontWeight: 600 }}
+              style={{ backgroundColor: '#00FFA3', color: '#020908', borderRadius: '2px', fontSize: '13px', fontWeight: 600 }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#00D98C')}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#00FFA3')}
             >
@@ -350,7 +350,7 @@ export default function WorkspacePage() {
           }}
           transition={{ duration: 0.3, ease: 'linear' }}
           className="border-r overflow-hidden"
-          style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.15)' }}
+          style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.15)' }}
         >
           <div className="h-full flex flex-col" style={{ width: '300px' }}>
             <div className="flex border-b" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
@@ -379,7 +379,7 @@ export default function WorkspacePage() {
                     className="w-full border p-3 resize-none outline-none"
                     rows={8}
                     style={{
-                      backgroundColor: '#061B1A',
+                      backgroundColor: '#020908',
                       borderColor: 'rgba(0,255,170,0.25)',
                       color: '#E6F1EF',
                       fontFamily: 'JetBrains Mono, monospace',
@@ -395,7 +395,7 @@ export default function WorkspacePage() {
                     className="w-full flex items-center justify-center gap-2 py-3 transition-all"
                     style={{
                       backgroundColor: '#00FFA3',
-                      color: '#061B1A',
+                      color: '#020908',
                       borderRadius: '2px',
                       fontSize: '13px',
                       fontWeight: 600,
@@ -447,9 +447,9 @@ export default function WorkspacePage() {
                     <div
                       key={component.id}
                       className="border p-3 cursor-move transition-all"
-                      style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '2px' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.backgroundColor = '#0B2321'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)'; e.currentTarget.style.backgroundColor = '#061B1A'; }}
+                      style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '2px' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.backgroundColor = '#040F0E'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)'; e.currentTarget.style.backgroundColor = '#020908'; }}
                       draggable
                       onDragStart={(e) => onDragStart(e, component)}
                     >
@@ -474,18 +474,18 @@ export default function WorkspacePage() {
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="absolute top-4 left-4 z-20 p-2 border transition-all"
             style={{
-              backgroundColor: '#0B2321',
+              backgroundColor: '#040F0E',
               borderColor: 'rgba(0,255,170,0.3)',
               color: '#00FFA3',
               borderRadius: '2px',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = '#00FFA3';
-              e.currentTarget.style.backgroundColor = '#0F2E2B';
+              e.currentTarget.style.backgroundColor = '#071512';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
-              e.currentTarget.style.backgroundColor = '#0B2321';
+              e.currentTarget.style.backgroundColor = '#040F0E';
             }}
           >
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
@@ -511,7 +511,7 @@ export default function WorkspacePage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.3, ease: 'linear' }}
             className="border-l overflow-y-auto"
-            style={{ width: '320px', backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.15)' }}
+            style={{ width: '320px', backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.15)' }}
           >
             <div className="p-6">
               <div
@@ -534,7 +534,7 @@ export default function WorkspacePage() {
                         field === 'failureRate' ? '0.01%' : '500ms'
                       }
                       className="w-full border px-3 py-2 outline-none"
-                      style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.2)', color: '#E6F1EF', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', borderRadius: '2px' }}
+                      style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)', color: '#E6F1EF', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', borderRadius: '2px' }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
                       onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)')}
                     />
@@ -563,7 +563,7 @@ export default function WorkspacePage() {
                           field === 'packetLoss' ? '0.1%' : '100Mbps'
                         }
                         className="w-full border px-3 py-2 outline-none"
-                        style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.2)', color: '#E6F1EF', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', borderRadius: '2px' }}
+                      style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)', color: '#E6F1EF', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', borderRadius: '2px' }}
                         onFocus={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
                         onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)')}
                       />
@@ -641,7 +641,7 @@ export default function WorkspacePage() {
                   className="px-5 py-3 flex items-center gap-2 transition-all"
                   style={{
                     backgroundColor: '#00FFA3',
-                    color: '#061B1A',
+                    color: '#020908',
                     borderRadius: '2px',
                     fontSize: '13px',
                     fontWeight: 600,
