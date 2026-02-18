@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import Aurora from '../../components/Aurora';
 import TextType from '../components/TextType';
+import TerminalOutput from '../components/TerminalOutput';
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -251,32 +252,7 @@ export default function LandingPage() {
                 style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.8vw, 14px)' }}>
                 TERMINAL OUTPUT
               </div>
-              
-              <div className="overflow-hidden border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.1)',
-                color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', height: 'clamp(400px, 38vw, 620px)',
-                padding: 'clamp(16px, 1.4vw, 26px)', fontSize: 'clamp(11px, 0.85vw, 15px)' }}>
-                <div className="space-y-1.5">
-                  <div style={{ color: '#00FFA3' }}>$ infra-zero simulate --topology distributed</div>
-                  <div className="mt-3">[00:00:01] Parsing architecture graph...</div>
-                  <div>[00:00:02] Nodes: 5 | Edges: 8</div>
-                  <div>[00:00:03] Compiling to Rust WASM module...</div>
-                  <div style={{ color: '#00FFA3' }}>[00:00:04] ✓ Compilation complete (142ms)</div>
-                  <div className="mt-3">[00:00:05] Initializing Monte Carlo simulation...</div>
-                  <div>[00:00:06] Simulating 10,000 requests...</div>
-                  <div className="mt-3" style={{ color: '#FFB03B' }}>[00:00:08] [WARN] Service 'Video-Transcoder' queue depth &gt; 80%</div>
-                  <div>[00:00:09] Applying backpressure strategy...</div>
-                  <div style={{ color: '#00FFA3' }}>[00:00:10] ✓ System stabilized</div>
-                  <div className="mt-3">[00:00:12] Running consensus protocol tests...</div>
-                  <div>[00:00:13] Testing leader election...</div>
-                  <div style={{ color: '#00FFA3' }}>[00:00:14] ✓ Leader elected: node-api-2</div>
-                  <div>[00:00:15] Testing network partition tolerance...</div>
-                  <div style={{ color: '#00FFA3' }}>[00:00:17] ✓ CAP theorem verified (CP mode)</div>
-                  <div className="mt-3">[00:00:18] Generating deterministic hash...</div>
-                  <div style={{ color: '#00FFA3' }}>[00:00:19] SHA-256: 4f3d8a9b2c1e7f6a...</div>
-                  <div className="mt-3">[00:00:20] Simulation complete.</div>
-                  <div className="mt-2 animate-pulse">_</div>
-                </div>
-              </div>
+              <TerminalOutput />
             </div>
           </div>
         </motion.div>
@@ -353,49 +329,23 @@ export default function LandingPage() {
         style={{ backgroundColor: '#020908', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto grid md:grid-cols-2 items-center gap-16" style={{ maxWidth: '1840px' }}>
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
-            transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 relative h-96">
-            <svg className="w-full h-full" viewBox="0 0 500 400" preserveAspectRatio="xMidYMid meet">
-              {/* Central node */}
-              <circle cx="250" cy="200" r="20" fill="#00FFA3" opacity="0.8" />
-              
-              {/* Burst pattern with success/failure dots */}
-              {[...Array(12)].map((_, i) => {
-                const angle = (i / 12) * Math.PI * 2;
-                const x1 = 250;
-                const y1 = 200;
-                const x2 = 250 + Math.cos(angle) * 180;
-                const y2 = 200 + Math.sin(angle) * 180;
-                const isFailed = i === 3 || i === 7;
-                return (
-                  <g key={i}>
-                    <line x1={x1} y1={y1} x2={x2} y2={y2} 
-                      stroke={isFailed ? 'rgba(255,59,59,0.2)' : 'rgba(0,255,170,0.2)'} strokeWidth="1" />
-                    <motion.circle cx={x1} cy={y1} r="4" fill={isFailed ? '#FF3B3B' : '#00FFA3'}
-                      animate={{ cx: [x1, x2], cy: [y1, y2], opacity: [1, 0] }}
-                      transition={{ duration: 2, repeat: Infinity, delay: i * 0.15, ease: 'linear' }} />
-                  </g>
-                );
-              })}
-            </svg>
-            
-            {/* Metrics overlay */}
-            <div className="absolute bottom-8 left-8 right-8 grid grid-cols-2 gap-4">
-              <div className="border p-4" style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)' }}>
-                <div className="mb-1" style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.8vw, 14px)' }}>
-                  SUCCESS
+            transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 relative h-96"
+            style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
+              backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
+              backgroundSize: 'clamp(18px, 1.65vw, 28px) clamp(18px, 1.65vw, 28px)' }}>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <motion.div animate={{ boxShadow: ['0 0 0px rgba(0,255,170,0)', '0 0 30px rgba(0,255,170,0.4)', '0 0 0px rgba(0,255,170,0)'] }}
+                transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="border-2 flex items-center justify-center"
+                style={{ borderColor: '#00FFA3', backgroundColor: '#040F0E', width: 'clamp(140px, 13vw, 220px)', height: 'clamp(140px, 13vw, 220px)' }}>
+                <div className="text-center">
+                  <div style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(11px, 1vw, 16px)' }}>
+                    Redis
+                  </div>
+                  <div style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(9px, 0.75vw, 13px)', marginTop: '4px' }}>
+                    [Inserting...]
+                  </div>
                 </div>
-                <div style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(24px, 2.2vw, 40px)' }}>
-                  98.2%
-                </div>
-              </div>
-              <div className="border p-4" style={{ backgroundColor: '#040F0E', borderColor: 'rgba(255,59,59,0.3)' }}>
-                <div className="mb-1" style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.8vw, 14px)' }}>
-                  FAILED
-                </div>
-                <div style={{ color: '#FF3B3B', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(24px, 2.2vw, 40px)' }}>
-                  1.8%
-                </div>
-              </div>
+              </motion.div>
             </div>
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
@@ -482,21 +432,12 @@ export default function LandingPage() {
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 space-y-6">
             {/* Terminal */}
-            <div className="overflow-hidden border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
-              color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', height: 'clamp(240px, 22vw, 380px)',
-              padding: 'clamp(16px, 1.4vw, 26px)', fontSize: 'clamp(11px, 0.85vw, 15px)' }}>
-              <div className="space-y-1.5">
-                <div>[00:15:23] Load test initiated: 50k concurrent users</div>
-                <div>[00:15:24] Traffic spike detected</div>
-                <div>[00:15:25] Cache miss ratio: 78%</div>
-                <div className="mt-2" style={{ color: '#FF3B3B', fontWeight: 600 }}>[00:15:26] [FATAL] Cascading Failure detected</div>
-                <div style={{ color: '#FF3B3B' }}>[00:15:26] Database connection pool exhausted</div>
-                <div style={{ color: '#FF3B3B' }}>[00:15:27] Auth service unresponsive</div>
-                <div className="mt-2">[00:15:28] Circuit breaker triggered</div>
-                <div style={{ color: '#00FFA3' }}>[00:15:30] ✓ System recovered</div>
-                <div className="mt-2">[00:15:31] Generating post-mortem report...</div>
-              </div>
-            </div>
+            <TerminalOutput style={{
+              border: '1px solid rgba(0,255,170,0.2)',
+              height: 'clamp(240px, 22vw, 380px)',
+              padding: 'clamp(16px, 1.4vw, 26px)',
+              fontSize: 'clamp(11px, 0.85vw, 15px)',
+            }} />
 
             {/* Grade Panel */}
             <div className="border p-6" style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)' }}>
