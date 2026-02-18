@@ -2,27 +2,19 @@ import { Zap, Github, Menu, X, Terminal, Cpu, Database, Network } from 'lucide-r
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import Aurora from '../../components/Aurora';
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   return (
-    <div className="relative min-h-screen text-[#E6F1EF]" style={{ 
-      backgroundColor: '#061B1A',
-      fontFamily: 'Inter, sans-serif'
-    }}>
+    <div className="relative min-h-screen text-[#E6F1EF]" style={{backgroundColor: '#020908', fontFamily: 'Inter, sans-serif'}}>
       {/* Strict Vertical Grid Overlay */}
-      <div className="fixed inset-0 pointer-events-none" style={{
-        backgroundImage: 'repeating-linear-gradient(to right, rgba(0,255,170,0.06) 0px, rgba(0,255,170,0.06) 1px, transparent 1px, transparent 80px)',
-        backgroundSize: '80px 100%'
-      }} />
+      <div className="fixed inset-0 pointer-events-none" style={{backgroundImage: 'repeating-linear-gradient(to right, rgba(0,255,170,0.06) 0px, rgba(0,255,170,0.06) 1px, transparent 1px, transparent 80px)', backgroundSize: '80px 100%'}} />
       
       {/* Fixed Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b" style={{ 
-        backgroundColor: '#0B2321',
-        borderColor: 'rgba(0,255,170,0.1)'
-      }}>
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b" style={{backgroundColor: 'rgba(2,9,8,0.6)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderColor: 'rgba(0,255,170,0.1)'}}>
         <div className="mx-auto px-8 xl:px-12 2xl:px-16" style={{ maxWidth: '1920px' }}>
           <div className="flex items-center justify-between" style={{ height: 'clamp(64px, 5vh, 88px)' }}>
             <div className="tracking-tight cursor-pointer" style={{ color: '#00FFA3', fontSize: 'clamp(20px, 1.6vw, 32px)' }}
@@ -98,10 +90,21 @@ export default function LandingPage() {
       <section className="min-h-screen flex flex-col items-center justify-center px-8 xl:px-12 2xl:px-16 relative z-10" 
         style={{ paddingTop: 'clamp(120px, 12vh, 180px)', paddingBottom: 'clamp(80px, 10vh, 140px)' }}>
         
+        {/* Aurora Background Effect */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: -1 }}>
+          <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+            <Aurora
+              colorStops={["#5227FF","#7cff67","#5227FF"]}
+              amplitude={0.9}
+              blend={0.35}
+            />
+          </div>
+        </div>
+        
         {/* Micro Announcement Banner */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} 
           transition={{ duration: 0.3, ease: 'linear' }} className="cursor-pointer transition-all mb-12"
-          style={{ backgroundColor: '#0B2321', border: '1px solid rgba(0,255,170,0.15)', borderRadius: '4px',
+          style={{ backgroundColor: '#040F0E', border: '1px solid rgba(0,255,170,0.15)', borderRadius: '4px',
             padding: 'clamp(10px, 0.9vw, 16px) clamp(20px, 1.8vw, 32px)' }}
           onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(0,255,170,0.25)'}
           onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(0,255,170,0.15)'}>
@@ -133,7 +136,7 @@ export default function LandingPage() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} 
           transition={{ delay: 0.3, duration: 0.4, ease: 'linear' }} className="flex flex-wrap items-center justify-center gap-4 mb-20">
           <button onClick={() => navigate('/auth')} className="transition-all"
-            style={{ backgroundColor: '#00FFA3', color: '#061B1A', borderRadius: '4px',
+            style={{ backgroundColor: '#00FFA3', color: '#020908', borderRadius: '4px',
               padding: 'clamp(16px, 1.4vw, 24px) clamp(32px, 2.8vw, 52px)', fontSize: 'clamp(15px, 1.2vw, 20px)' }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#00D98C'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00FFA3'}>
@@ -143,7 +146,7 @@ export default function LandingPage() {
             style={{ borderColor: 'rgba(0,255,170,0.4)', color: '#00FFA3', backgroundColor: 'transparent',
               borderRadius: '4px', padding: 'clamp(16px, 1.4vw, 24px) clamp(32px, 2.8vw, 52px)', 
               fontSize: 'clamp(15px, 1.2vw, 20px)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#00FFA3'; e.currentTarget.style.color = '#061B1A'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#00FFA3'; e.currentTarget.style.color = '#020908'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#00FFA3'; }}>
             <Github style={{ width: 'clamp(18px, 1.5vw, 26px)', height: 'clamp(18px, 1.5vw, 26px)' }} />
             View on GitHub
@@ -153,7 +156,7 @@ export default function LandingPage() {
         {/* PRODUCT FRAME — COMMAND CENTER */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
           transition={{ delay: 0.5, duration: 0.5, ease: 'linear' }} className="w-full border"
-          style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.2)', maxWidth: '1840px' }}>
+          style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.2)', maxWidth: '1840px' }}>
           <div className="grid md:grid-cols-2">
             {/* Left Pane — The Canvas */}
             <div className="border-r" style={{ borderColor: 'rgba(0,255,170,0.1)', padding: 'clamp(24px, 2.2vw, 44px)' }}>
@@ -163,7 +166,7 @@ export default function LandingPage() {
               </div>
               
               {/* AI Input Box */}
-              <div className="mb-6 border" style={{ backgroundColor: '#041615', borderColor: 'rgba(0,255,170,0.2)',
+              <div className="mb-6 border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
                 fontFamily: 'JetBrains Mono, monospace', color: '#8FA9A3', padding: 'clamp(12px, 1.1vw, 20px)',
                 fontSize: 'clamp(11px, 0.85vw, 15px)' }}>
                 <div style={{ color: '#00FFA3' }}>→ README.md uploaded</div>
@@ -171,7 +174,7 @@ export default function LandingPage() {
               </div>
 
               {/* Node Graph Visualization */}
-              <div className="relative border" style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.1)',
+              <div className="relative border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.1)',
                 backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
                 backgroundSize: 'clamp(18px, 1.65vw, 28px) clamp(18px, 1.65vw, 28px)', height: 'clamp(400px, 38vw, 620px)' }}>
                 <svg className="w-full h-full" viewBox="0 0 500 400" preserveAspectRatio="xMidYMid meet">
@@ -184,7 +187,7 @@ export default function LandingPage() {
                   {/* Frontend Node */}
                   <motion.g initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 0.7, duration: 0.3, ease: 'linear' }}>
-                    <rect x="60" y="50" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                    <rect x="60" y="50" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                     <text x="100" y="85" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                       Frontend
                     </text>
@@ -193,7 +196,7 @@ export default function LandingPage() {
                   {/* Auth Node */}
                   <motion.g initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 0.8, duration: 0.3, ease: 'linear' }}>
-                    <rect x="260" y="50" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                    <rect x="260" y="50" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                     <text x="300" y="85" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                       Auth
                     </text>
@@ -202,7 +205,7 @@ export default function LandingPage() {
                   {/* API Node - Active/Selected */}
                   <motion.g initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} 
                     transition={{ delay: 0.9, duration: 0.3, ease: 'linear' }}>
-                    <rect x="160" y="120" width="80" height="60" fill="#0B2321" stroke="#00FFA3" strokeWidth="2" 
+                    <rect x="160" y="120" width="80" height="60" fill="#040F0E" stroke="#00FFA3" strokeWidth="2" 
                       style={{ filter: 'drop-shadow(0 0 8px rgba(0,255,170,0.4))' }} />
                     <text x="200" y="155" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace">
                       API
@@ -212,7 +215,7 @@ export default function LandingPage() {
                   {/* Database Node */}
                   <motion.g initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 1.0, duration: 0.3, ease: 'linear' }}>
-                    <rect x="110" y="250" width="80" height="60" fill="#0B2321" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
+                    <rect x="110" y="250" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
                     <text x="150" y="285" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
                       Database
                     </text>
@@ -221,7 +224,7 @@ export default function LandingPage() {
                   {/* Redis Node (AI inserting) */}
                   <motion.g initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} 
                     transition={{ delay: 1.1, duration: 0.3, ease: 'linear' }}>
-                    <rect x="310" y="250" width="80" height="60" fill="#0B2321" stroke="#00FFA3" strokeWidth="2" strokeDasharray="4,4" />
+                    <rect x="310" y="250" width="80" height="60" fill="#040F0E" stroke="#00FFA3" strokeWidth="2" strokeDasharray="4,4" />
                     <text x="350" y="285" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace">
                       Redis
                     </text>
@@ -240,7 +243,7 @@ export default function LandingPage() {
                 TERMINAL OUTPUT
               </div>
               
-              <div className="overflow-hidden border" style={{ backgroundColor: '#041615', borderColor: 'rgba(0,255,170,0.1)',
+              <div className="overflow-hidden border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.1)',
                 color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', height: 'clamp(400px, 38vw, 620px)',
                 padding: 'clamp(16px, 1.4vw, 26px)', fontSize: 'clamp(11px, 0.85vw, 15px)' }}>
                 <div className="space-y-1.5">
@@ -294,7 +297,7 @@ export default function LandingPage() {
 
       {/* SECTION 3 — FEATURE 1: AI-Native Generative Canvas */}
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#0B2321', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
+        style={{ backgroundColor: '#040F0E', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto grid md:grid-cols-2 items-center gap-16" style={{ maxWidth: '1840px' }}>
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }}>
@@ -315,13 +318,13 @@ export default function LandingPage() {
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }} className="relative border h-96"
-            style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.2)',
+            style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
               backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
               backgroundSize: 'clamp(18px, 1.65vw, 28px) clamp(18px, 1.65vw, 28px)' }}>
             <div className="absolute inset-0 flex items-center justify-center">
               <motion.div animate={{ boxShadow: ['0 0 0px rgba(0,255,170,0)', '0 0 30px rgba(0,255,170,0.4)', '0 0 0px rgba(0,255,170,0)'] }}
                 transition={{ duration: 3, repeat: Infinity, ease: 'linear' }} className="border-2 flex items-center justify-center"
-                style={{ borderColor: '#00FFA3', width: 'clamp(140px, 13vw, 220px)', height: 'clamp(140px, 13vw, 220px)' }}>
+                style={{ borderColor: '#00FFA3', backgroundColor: '#040F0E', width: 'clamp(140px, 13vw, 220px)', height: 'clamp(140px, 13vw, 220px)' }}>
                 <div className="text-center">
                   <div style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(11px, 1vw, 16px)' }}>
                     Redis
@@ -338,7 +341,7 @@ export default function LandingPage() {
 
       {/* FEATURE 2: Hardware-Accelerated Simulation */}
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#061B1A', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
+        style={{ backgroundColor: '#020908', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto grid md:grid-cols-2 items-center gap-16" style={{ maxWidth: '1840px' }}>
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 relative h-96">
@@ -368,7 +371,7 @@ export default function LandingPage() {
             
             {/* Metrics overlay */}
             <div className="absolute bottom-8 left-8 right-8 grid grid-cols-2 gap-4">
-              <div className="border p-4" style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.3)' }}>
+              <div className="border p-4" style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)' }}>
                 <div className="mb-1" style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.8vw, 14px)' }}>
                   SUCCESS
                 </div>
@@ -376,7 +379,7 @@ export default function LandingPage() {
                   98.2%
                 </div>
               </div>
-              <div className="border p-4" style={{ backgroundColor: '#0B2321', borderColor: 'rgba(255,59,59,0.3)' }}>
+              <div className="border p-4" style={{ backgroundColor: '#040F0E', borderColor: 'rgba(255,59,59,0.3)' }}>
                 <div className="mb-1" style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.8vw, 14px)' }}>
                   FAILED
                 </div>
@@ -408,7 +411,7 @@ export default function LandingPage() {
 
       {/* FEATURE 3: Conflict-Free Multiplayer */}
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#0B2321', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
+        style={{ backgroundColor: '#040F0E', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto grid md:grid-cols-2 items-center gap-16" style={{ maxWidth: '1840px' }}>
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }}>
@@ -429,7 +432,7 @@ export default function LandingPage() {
           </motion.div>
           <motion.div initial={{ opacity: 0, x: 20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }} className="relative border h-96"
-            style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.2)' }}>
+            style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)' }}>
             <div className="absolute inset-0 p-12">
               <div className="relative h-full">
                 <motion.div className="absolute" style={{ backgroundColor: '#00FFA3', width: '14px', height: '14px' }}
@@ -465,12 +468,12 @@ export default function LandingPage() {
 
       {/* FEATURE 4: Ops Terminal & Post-Mortem */}
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#061B1A', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
+        style={{ backgroundColor: '#020908', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto grid md:grid-cols-2 items-center gap-16" style={{ maxWidth: '1840px' }}>
           <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.4, ease: 'linear' }} className="order-2 md:order-1 space-y-6">
             {/* Terminal */}
-            <div className="overflow-hidden border" style={{ backgroundColor: '#041615', borderColor: 'rgba(0,255,170,0.2)',
+            <div className="overflow-hidden border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)',
               color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', height: 'clamp(240px, 22vw, 380px)',
               padding: 'clamp(16px, 1.4vw, 26px)', fontSize: 'clamp(11px, 0.85vw, 15px)' }}>
               <div className="space-y-1.5">
@@ -487,7 +490,7 @@ export default function LandingPage() {
             </div>
 
             {/* Grade Panel */}
-            <div className="border p-6" style={{ backgroundColor: '#0B2321', borderColor: 'rgba(0,255,170,0.3)' }}>
+            <div className="border p-6" style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)' }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="uppercase tracking-widest" 
                   style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.85vw, 13px)' }}>
@@ -527,7 +530,7 @@ export default function LandingPage() {
 
       {/* SECTION 4 — METRICS STRIP */}
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#0B2321', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
+        style={{ backgroundColor: '#040F0E', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} 
           transition={{ duration: 0.5, ease: 'linear' }} className="mx-auto" style={{ maxWidth: '1840px' }}>
           <div className="grid grid-cols-2 md:grid-cols-4">
@@ -555,14 +558,14 @@ export default function LandingPage() {
 
       {/* SECTION 5 — LIBRARY OF DOOM */}
       <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#061B1A', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
+        style={{ backgroundColor: '#020908', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
         <div className="mx-auto" style={{ maxWidth: '1700px' }}>
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} 
             transition={{ duration: 0.5, ease: 'linear' }} className="border p-12"
-            style={{ backgroundColor: '#0B2321', borderColor: '#00FFA3', borderWidth: '1px' }}>
+            style={{ backgroundColor: '#040F0E', borderColor: '#00FFA3', borderWidth: '1px' }}>
             
             <div className="inline-block uppercase tracking-widest mb-8" 
-              style={{ backgroundColor: '#00FFA3', color: '#061B1A', fontFamily: 'JetBrains Mono, monospace',
+              style={{ backgroundColor: '#00FFA3', color: '#020908', fontFamily: 'JetBrains Mono, monospace',
                 fontWeight: 600, padding: 'clamp(8px, 0.8vw, 12px) clamp(16px, 1.5vw, 24px)', fontSize: 'clamp(10px, 0.85vw, 13px)' }}>
               Educational Presets
             </div>
@@ -601,7 +604,7 @@ export default function LandingPage() {
                 }
               ].map((preset) => (
                 <div key={preset.number} className="border p-6" 
-                  style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.2)' }}>
+                  style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)' }}>
                   <div className="uppercase tracking-widest mb-3" 
                     style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.85vw, 13px)' }}>
                     Scenario {preset.number}
@@ -620,7 +623,7 @@ export default function LandingPage() {
             <button className="border transition-all uppercase tracking-wider mt-8"
               style={{ borderColor: 'rgba(0,255,170,0.4)', color: '#00FFA3', backgroundColor: 'transparent',
                 fontFamily: 'JetBrains Mono, monospace', padding: 'clamp(14px, 1.3vw, 20px) clamp(32px, 2.8vw, 48px)', fontSize: 'clamp(12px, 1vw, 15px)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#00FFA3'; e.currentTarget.style.color = '#061B1A'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#00FFA3'; e.currentTarget.style.color = '#020908'; }}
               onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#00FFA3'; }}>
               Browse All Scenarios →
             </button>
@@ -630,7 +633,7 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer className="border-t px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#061B1A', borderColor: 'rgba(0,255,170,0.1)', paddingTop: 'clamp(60px, 7vw, 100px)', paddingBottom: 'clamp(60px, 7vw, 100px)' }}>
+        style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.1)', paddingTop: 'clamp(60px, 7vw, 100px)', paddingBottom: 'clamp(60px, 7vw, 100px)' }}>
         <div className="mx-auto" style={{ maxWidth: '1840px' }}>
           <div className="grid md:grid-cols-4 gap-12">
             <div>
