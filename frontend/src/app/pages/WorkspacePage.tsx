@@ -37,8 +37,8 @@ const initialNodes: Node[] = [
 const edgeBase = {
   type: 'smoothstep',
   animated: false,
-  style: { stroke: 'rgba(0,255,170,0.3)', strokeWidth: 2 },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#00FFA3', width: 20, height: 20 },
+  style: { stroke: 'rgba(0,255,170,0.48)', strokeWidth: 2.5 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#00FFA3', width: 16, height: 16 },
 };
 
 const initialEdges: Edge[] = [
@@ -89,8 +89,8 @@ export default function WorkspacePage() {
           {
             ...params,
             type: 'smoothstep',
-            style: { stroke: 'rgba(0,255,170,0.3)', strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#00FFA3', width: 20, height: 20 },
+            style: { stroke: 'rgba(0,255,170,0.48)', strokeWidth: 2.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#00FFA3', width: 16, height: 16 },
             animated: mode === 'sim',
           },
           eds,
@@ -350,7 +350,11 @@ export default function WorkspacePage() {
           }}
           transition={{ duration: 0.3, ease: 'linear' }}
           className="border-r overflow-hidden"
-          style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.15)' }}
+          style={{
+            background: 'linear-gradient(180deg, #071816 0%, #040F0E 40%, #030D0C 100%)',
+            borderColor: 'rgba(0,255,170,0.15)',
+            boxShadow: 'inset -1px 0 0 rgba(0,255,170,0.04)',
+          }}
         >
           <div className="h-full flex flex-col" style={{ width: '300px' }}>
             <div className="flex border-b" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
@@ -379,15 +383,24 @@ export default function WorkspacePage() {
                     className="w-full border p-3 resize-none outline-none"
                     rows={8}
                     style={{
-                      backgroundColor: '#020908',
-                      borderColor: 'rgba(0,255,170,0.25)',
-                      color: '#E6F1EF',
+                      backgroundColor: '#020A09',
+                      borderColor: 'rgba(0,255,170,0.2)',
+                      color: '#DFF0EC',
                       fontFamily: 'JetBrains Mono, monospace',
                       fontSize: '12px',
-                      borderRadius: '2px',
+                      borderRadius: '3px',
+                      boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.35)',
+                      lineHeight: '1.6',
+                      transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
                     }}
-                    onFocus={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.25)')}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = '#00FFA3';
+                      e.currentTarget.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.35), 0 0 0 2px rgba(0,255,170,0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)';
+                      e.currentTarget.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.35)';
+                    }}
                   />
                   <button
                     onClick={handleGenerate}
@@ -396,13 +409,25 @@ export default function WorkspacePage() {
                     style={{
                       backgroundColor: '#00FFA3',
                       color: '#020908',
-                      borderRadius: '2px',
+                      borderRadius: '3px',
                       fontSize: '13px',
                       fontWeight: 600,
                       opacity: isGenerating ? 0.6 : 1,
+                      boxShadow: '0 2px 12px rgba(0,255,163,0.22)',
+                      letterSpacing: '0.03em',
                     }}
-                    onMouseEnter={(e) => !isGenerating && (e.currentTarget.style.backgroundColor = '#00D98C')}
-                    onMouseLeave={(e) => !isGenerating && (e.currentTarget.style.backgroundColor = '#00FFA3')}
+                    onMouseEnter={(e) => {
+                      if (!isGenerating) {
+                        e.currentTarget.style.backgroundColor = '#00E895';
+                        e.currentTarget.style.boxShadow = '0 3px 18px rgba(0,255,163,0.35)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isGenerating) {
+                        e.currentTarget.style.backgroundColor = '#00FFA3';
+                        e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,255,163,0.22)';
+                      }
+                    }}
                   >
                     <Sparkles style={{ width: '16px', height: '16px' }} />
                     {isGenerating ? 'GENERATING...' : 'GENERATE ARCHITECTURE'}
@@ -422,19 +447,22 @@ export default function WorkspacePage() {
                     className="w-full flex items-center justify-center gap-2 py-3 border transition-all"
                     style={{
                       backgroundColor: 'transparent',
-                      borderColor: 'rgba(0,255,170,0.3)',
+                      borderColor: 'rgba(0,255,170,0.28)',
                       color: '#00FFA3',
-                      borderRadius: '2px',
+                      borderRadius: '3px',
                       fontSize: '13px',
                       fontWeight: 600,
+                      letterSpacing: '0.03em',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#00FFA3';
-                      e.currentTarget.style.backgroundColor = 'rgba(0,255,170,0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.8)';
+                      e.currentTarget.style.backgroundColor = 'rgba(0,255,170,0.06)';
+                      e.currentTarget.style.boxShadow = '0 0 10px rgba(0,255,170,0.08)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
+                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.28)';
                       e.currentTarget.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
                     <FileImage style={{ width: '16px', height: '16px' }} />
@@ -446,17 +474,33 @@ export default function WorkspacePage() {
                   {componentList.map((component) => (
                     <div
                       key={component.id}
-                      className="border p-3 cursor-move transition-all"
-                      style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '2px' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.backgroundColor = '#040F0E'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)'; e.currentTarget.style.backgroundColor = '#020908'; }}
+                      className="border cursor-move transition-all"
+                      style={{
+                        backgroundColor: '#020A09',
+                        borderColor: 'rgba(0,255,170,0.18)',
+                        borderRadius: '3px',
+                        padding: '10px 12px 10px 14px',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(0,255,170,0.55)';
+                        e.currentTarget.style.backgroundColor = '#061410';
+                        e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.4), inset 2px 0 0 rgba(0,255,170,0.4)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(0,255,170,0.18)';
+                        e.currentTarget.style.backgroundColor = '#020A09';
+                        e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.3)';
+                      }}
                       draggable
                       onDragStart={(e) => onDragStart(e, component)}
                     >
-                      <div style={{ color: '#E6F1EF', fontSize: '13px', fontFamily: 'JetBrains Mono, monospace', marginBottom: '4px' }}>
+                      <div style={{ color: '#DFF0EC', fontSize: '13px', fontFamily: 'JetBrains Mono, monospace', marginBottom: '3px', fontWeight: 500 }}>
                         {component.name}
                       </div>
-                      <div style={{ color: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
+                      <div style={{ color: '#5A8880', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
                         {component.type}
                       </div>
                     </div>

@@ -8,6 +8,19 @@ import { useNavigate } from 'react-router';
 const VARIANT_STROKE_OPACITIES = [0.40, 0.36, 0.44, 0.38];
 const VARIANT_STROKE_BRIGHT    = [0.68, 0.64, 0.72, 0.66];
 
+// Per-card dot grid opacity — break perfect uniformity without randomness
+const DOT_GRID_OPACITIES = [0.86, 0.93, 0.77, 0.97, 0.81, 0.91];
+
+// Per-card surface gradient — card 0 is subtly "featured", 2/4 slightly deeper
+const CARD_BACKGROUNDS = [
+  'linear-gradient(180deg, rgba(11,26,22,0.93) 0%, rgba(7,19,16,0.97) 100%)',  // +featured lift
+  'linear-gradient(180deg, rgba(10,23,20,0.90) 0%, rgba(6,16,14,0.95) 100%)',  // base
+  'linear-gradient(180deg, rgba(9,20,17,0.87) 0%, rgba(6,14,12,0.93) 100%)',   // slightly deeper
+  'linear-gradient(180deg, rgba(10,23,20,0.90) 0%, rgba(6,16,14,0.95) 100%)',  // base
+  'linear-gradient(180deg, rgba(9,20,17,0.87) 0%, rgba(6,14,12,0.93) 100%)',   // slightly deeper
+  'linear-gradient(180deg, rgba(10,23,20,0.90) 0%, rgba(6,16,14,0.95) 100%)',  // base
+];
+
 const GraphThumbnail = ({ variant, failed }: { variant: number; failed?: boolean }) => {
   const idx    = variant % VARIANT_STROKE_OPACITIES.length;
   const dimO   = VARIANT_STROKE_OPACITIES[idx];
@@ -272,10 +285,11 @@ export default function DashboardPage() {
                   style={{
                     borderRadius: '9px',
                     color: isActive ? 'var(--iz-accent-primary, #19f0b4)' : 'rgba(230,255,246,0.50)',
-                    background: isActive ? 'rgba(25,208,160,0.06)' : 'transparent',
+                    background: isActive ? 'rgba(25,208,160,0.09)' : 'transparent',
                     fontSize: '15.5px',
                     fontWeight: isActive ? 500 : 400,
-                    border: isActive ? '1px solid rgba(25,208,160,0.13)' : '1px solid transparent',
+                    border: isActive ? '1px solid rgba(25,208,160,0.16)' : '1px solid transparent',
+                    boxShadow: isActive ? 'inset 2.5px 0 0 rgba(25,208,160,0.50)' : 'none',
                     transition: `all 200ms cubic-bezier(0.22,1,0.36,1)`,
                   }}
                   onMouseEnter={(e) => {
@@ -334,13 +348,15 @@ export default function DashboardPage() {
             className="flex items-start justify-between mb-9"
             style={{ position: 'relative' }}
           >
-            {/* ── Focal spotlight — barely-there radial glow behind title ── */}
+            {/* ── Focal spotlight — tight subconscious eye-pull, not visible glow ── */}
             <div aria-hidden style={{
               position: 'absolute',
-              inset: 0,
-              background: 'radial-gradient(circle at 25% 40%, rgba(25,240,180,0.08), transparent 58%)',
+              top: '-24px',
+              left: '-16px',
+              right: 0,
+              bottom: '-24px',
+              background: 'radial-gradient(ellipse 42% 65% at 17% 54%, rgba(25,240,180,0.13) 0%, rgba(25,240,180,0.05) 36%, transparent 62%)',
               pointerEvents: 'none',
-              borderRadius: '16px',
             }} />
 
             <div style={{ position: 'relative' }}>
@@ -389,12 +405,12 @@ export default function DashboardPage() {
             transition={{ delay: 0.28, duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             className="mb-10"
             style={{
-              background: 'linear-gradient(180deg, var(--iz-surface-3, #0a1714) 0%, var(--iz-surface-2, #07110f) 100%)',
+              background: 'linear-gradient(180deg, #0c1e19 0%, #08120f 55%, #06100d 100%)',
               border: '1px solid rgba(25,208,160,0.10)',
-              borderTop: '1px solid rgba(25,208,160,0.20)',
+              borderTop: '1px solid rgba(25,208,160,0.22)',
               borderRadius: '16px',
               padding: '28px 28px',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(25,208,160,0.06)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(25,208,160,0.07), inset 0 2px 14px rgba(0,0,0,0.25)',
             }}
           >
             <div className="flex items-start gap-3 mb-5">
@@ -486,7 +502,7 @@ export default function DashboardPage() {
                     transition={{ delay: 0.38 + index * 0.07, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                     className="cursor-pointer group relative iz-card-hover"
                     style={{
-                      background: 'linear-gradient(180deg, rgba(10,23,20,0.9) 0%, rgba(6,16,14,0.95) 100%)',
+                      background: CARD_BACKGROUNDS[index % CARD_BACKGROUNDS.length],
                       border: '1.5px solid rgba(25,208,160,0.22)',
                       borderTop: '1.5px solid rgba(25,208,160,0.40)',
                       borderRadius: `${radius}px`,
@@ -586,7 +602,7 @@ export default function DashboardPage() {
                         position: 'absolute', inset: 0,
                         backgroundImage: 'radial-gradient(circle, rgba(25,208,160,0.035) 1px, transparent 1px)',
                         backgroundSize: `${18 + (index % 3)}px ${18 + (index % 3)}px`,
-                        opacity: 0.9 + (index % 3) * 0.05,
+                        opacity: DOT_GRID_OPACITIES[index % DOT_GRID_OPACITIES.length],
                       }}/>
                       <GraphThumbnail variant={index} failed={project.isFailed} />
 

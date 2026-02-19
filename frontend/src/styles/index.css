@@ -36,8 +36,8 @@
 }
 .iz-input:focus {
   outline: none;
-  border-color: rgba(25, 240, 180, 0.38) !important;
-  box-shadow: 0 0 0 3px rgba(25, 240, 180, 0.08);
+  border-color: rgba(25, 240, 180, 0.42) !important;
+  box-shadow: 0 0 0 3px rgba(25, 240, 180, 0.09), inset 0 1px 4px rgba(0, 0, 0, 0.20);
 }
 
 /* ─────────────────────────────────────────────────────────────
