@@ -343,34 +343,28 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => navigate('/workspace')}
-              className="flex items-center gap-2 flex-shrink-0"
+              className="flex items-center gap-2.5 flex-shrink-0 iz-btn-green uppercase tracking-wider"
               style={{
-                background: 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)',
                 color: '#020F0A',
-                padding: '11px 22px',
-                borderRadius: '10px',
-                fontSize: '13.5px',
+                padding: '13px 28px',
+                borderRadius: '2px',
+                fontSize: '13px',
                 fontWeight: 600,
-                letterSpacing: '-0.01em',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.12) inset, 0 4px 14px rgba(0,180,130,0.25)',
+                letterSpacing: '0.07em',
                 transition: 'all 160ms cubic-bezier(0.2,0,0,1)',
                 border: 'none',
                 cursor: 'pointer',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #00E5AA 0%, #00C990 100%)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-                e.currentTarget.style.boxShadow = '0 1px 0 0 rgba(255,255,255,0.15) inset, 0 6px 20px rgba(0,180,130,0.32)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 1px 0 0 rgba(255,255,255,0.12) inset, 0 4px 14px rgba(0,180,130,0.25)';
-              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
             >
+              <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
               <Plus style={{ width: '16px', height: '16px' }} />
               <span>New Project</span>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.65, letterSpacing: '0.05em' }}>INIT</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.6, letterSpacing: '0.1em' }}>INIT</span>
             </button>
           </motion.div>
 
@@ -429,23 +423,26 @@ export default function DashboardPage() {
                 onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(0,255,170,0.15)'}
               />
               <button
+                className="iz-btn-green uppercase tracking-wider"
                 style={{
-                  background: 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)',
                   color: '#020F0A',
-                  padding: '10px 24px',
-                  borderRadius: '9px',
+                  padding: '13px 28px',
+                  borderRadius: '2px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  boxShadow: '0 2px 10px rgba(0,180,130,0.2)',
+                  letterSpacing: '0.07em',
                   border: 'none',
                   cursor: 'pointer',
                   transition: 'all 160ms cubic-bezier(0.2,0,0,1)',
                   flexShrink: 0,
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #00E5AA 0%, #00C990 100%)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
               >
+                <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
                 Join
               </button>
             </div>
