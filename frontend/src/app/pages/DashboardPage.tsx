@@ -1,7 +1,82 @@
-import { motion, AnimatePresence } from 'motion/react';
+﻿import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useRef } from 'react';
-import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check } from 'lucide-react';
+import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check, LayoutGrid, Users, BookMarked, Settings2, Cpu, Wifi, HardDrive } from 'lucide-react';
 import { useNavigate } from 'react-router';
+
+// â”€â”€ Premium graph thumbnail variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const GraphThumbnail = ({ variant, failed }: { variant: number; failed?: boolean }) => {
+  const stroke = failed ? 'rgba(255,90,90,0.5)' : 'rgba(0,220,160,0.42)';
+  const strokeBright = failed ? 'rgba(255,90,90,0.8)' : 'rgba(0,220,160,0.72)';
+  const fill = failed ? '#1a0a0a' : '#081916';
+  const fillActive = failed ? '#200d0d' : '#0c2420';
+  const nodeFill = failed ? '#FF6B6B' : '#00E5AA';
+
+  const variants: React.ReactNode[] = [
+    // Variant 0: three-tier architecture
+    <g key="v0">
+      <line x1="150" y1="40" x2="90" y2="90" stroke={stroke} strokeWidth="1.2"/>
+      <line x1="150" y1="40" x2="210" y2="90" stroke={stroke} strokeWidth="1.2"/>
+      <line x1="90" y1="90" x2="90" y2="138" stroke={stroke} strokeWidth="1.2"/>
+      <line x1="210" y1="90" x2="210" y2="138" stroke={stroke} strokeWidth="1.2"/>
+      <rect x="125" y="28" width="50" height="22" rx="3" fill={fillActive} stroke={strokeBright} strokeWidth="1.2"/>
+      <rect x="65"  y="78" width="50" height="22" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <rect x="185" y="78" width="50" height="22" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <rect x="65"  y="126" width="50" height="22" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <rect x="185" y="126" width="50" height="22" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <motion.circle r="2.5" fill={nodeFill} cx="150" cy="40"
+        animate={{ opacity: [0.9, 0.4, 0.9] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}/>
+    </g>,
+    // Variant 1: ring topology
+    <g key="v1">
+      <circle cx="150" cy="90" r="52" fill="none" stroke={stroke} strokeWidth="1" strokeDasharray="4 3"/>
+      <line x1="150" y1="38" x2="198" y2="116" stroke={stroke} strokeWidth="1.1"/>
+      <line x1="198" y1="116" x2="102" y2="116" stroke={stroke} strokeWidth="1.1"/>
+      <line x1="102" y1="116" x2="150" y2="38" stroke={stroke} strokeWidth="1.1"/>
+      <rect x="134" y="26" width="32" height="20" rx="3" fill={fillActive} stroke={strokeBright} strokeWidth="1.2"/>
+      <rect x="186" y="106" width="28" height="20" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <rect x="86"  y="106" width="28" height="20" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <motion.circle r="2.5" fill={nodeFill} cx="150" cy="36"
+        animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}/>
+    </g>,
+    // Variant 2: pipeline
+    <g key="v2">
+      <line x1="44" y1="90" x2="100" y2="90" stroke={stroke} strokeWidth="1.2"/>
+      <line x1="124" y1="90" x2="176" y2="90" stroke={stroke} strokeWidth="1.2"/>
+      <line x1="200" y1="90" x2="256" y2="90" stroke={stroke} strokeWidth="1.2"/>
+      <line x1="150" y1="65" x2="150" y2="78" stroke={stroke} strokeWidth="1"/>
+      <rect x="20"  y="78" width="48" height="24" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <rect x="100" y="78" width="48" height="24" rx="3" fill={fillActive} stroke={strokeBright} strokeWidth="1.2"/>
+      <rect x="176" y="78" width="48" height="24" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>
+      <rect x="130" y="50" width="40" height="17" rx="3" fill={fill} stroke={stroke} strokeWidth="0.9"/>
+      <motion.circle r="2.8" fill={nodeFill} cx="44" cy="90"
+        animate={{ cx: [44, 256], opacity: [1, 0] }} transition={{ duration: 2.8, repeat: Infinity, ease: 'linear', delay: 0.6 }}/>
+    </g>,
+    // Variant 3: hub and spoke
+    <g key="v3">
+      {[0,60,120,180,240,300].map((deg, i) => {
+        const rad = (deg * Math.PI) / 180;
+        const x2 = 150 + 58 * Math.cos(rad);
+        const y2 = 90 + 58 * Math.sin(rad);
+        return <line key={i} x1="150" y1="90" x2={x2} y2={y2} stroke={stroke} strokeWidth="1.1"/>;
+      })}
+      {[0,60,120,180,240,300].map((deg, i) => {
+        const rad = (deg * Math.PI) / 180;
+        const cx = 150 + 58 * Math.cos(rad);
+        const cy = 90 + 58 * Math.sin(rad);
+        return <rect key={i} x={cx - 14} y={cy - 10} width="28" height="20" rx="3" fill={fill} stroke={stroke} strokeWidth="1"/>;
+      })}
+      <circle cx="150" cy="90" r="18" fill={fillActive} stroke={strokeBright} strokeWidth="1.3"/>
+      <motion.circle r="2.5" fill={nodeFill} cx="150" cy="90"
+        animate={{ opacity: [0.8, 0.2, 0.8] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 0.1 }}/>
+    </g>
+  ];
+
+  return (
+    <svg className="w-full h-full" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid meet">
+      {variants[variant % variants.length]}
+    </svg>
+  );
+};
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -95,417 +170,499 @@ export default function DashboardPage() {
     setOpenMenuId(null);
   };
 
-  const navItems = ['My Projects', 'Shared with Me', 'Library of Doom', 'Settings'];
+  const navItems = [
+    { label: 'My Projects',    icon: LayoutGrid },
+    { label: 'Shared with Me', icon: Users },
+    { label: 'Library of Doom',icon: BookMarked },
+    { label: 'Settings',       icon: Settings2 },
+  ];
 
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: '#020908', fontFamily: 'Inter, sans-serif' }}>
-      {/* Vertical Grid Overlay */}
+
+      {/* â”€â”€ Background layer 1: grid with radial fade â”€â”€ */}
       <div className="fixed inset-0 pointer-events-none" style={{
-        backgroundImage: 'repeating-linear-gradient(to right, rgba(0,255,170,0.06) 0px, rgba(0,255,170,0.06) 1px, transparent 1px, transparent 80px)',
-        backgroundSize: '80px 100%'
+        backgroundImage: [
+          'linear-gradient(rgba(0,255,170,0.045) 1px, transparent 1px)',
+          'linear-gradient(90deg, rgba(0,255,170,0.045) 1px, transparent 1px)',
+        ].join(','),
+        backgroundSize: '80px 80px',
+        WebkitMaskImage: 'radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 100%)',
+        maskImage: 'radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 100%)',
       }} />
 
-      {/* LEFT SIDEBAR */}
+      {/* â”€â”€ Background layer 2: vignette â”€â”€ */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        background: 'radial-gradient(ellipse 90% 90% at 50% 50%, transparent 45%, rgba(1,4,3,0.8) 100%)',
+      }} />
+
+      {/* â”€â”€ Background layer 3: noise film grain â”€â”€ */}
+      <svg style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.03, zIndex: 1 }}>
+        <filter id="iz-noise">
+          <feTurbulence type="fractalNoise" baseFrequency="0.92" numOctaves="4" stitchTiles="stitch"/>
+          <feColorMatrix type="saturate" values="0"/>
+        </filter>
+        <rect width="100%" height="100%" filter="url(#iz-noise)"/>
+      </svg>
+
+      {/* â”€â”€ LEFT SIDEBAR â”€â”€ */}
       <motion.aside
-        initial={{ opacity: 0, x: -8 }}
+        initial={{ opacity: 0, x: -10 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3, ease: 'linear' }}
-        className="relative z-10"
-        style={{ width: '260px', backgroundColor: '#040F0E', borderRight: '1px solid rgba(0,255,170,0.15)' }}
+        transition={{ duration: 0.35, ease: [0.25, 0, 0.1, 1] }}
+        className="relative z-10 flex-shrink-0"
+        style={{
+          width: '252px',
+          background: 'linear-gradient(180deg, #040F0C 0%, #030C09 100%)',
+          borderRight: '1px solid rgba(0,255,170,0.1)',
+        }}
       >
         <div className="h-screen flex flex-col">
+
           {/* User Profile Block */}
-          <div className="p-6 border-b" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
-            <div className="flex items-center gap-3 border p-3" style={{ borderColor: 'rgba(0,255,170,0.2)', borderRadius: '2px' }}>
-              <div className="relative">
-                <div className="rounded-full flex items-center justify-center border" 
-                  style={{ width: '40px', height: '40px', borderColor: 'rgba(0,255,170,0.3)', backgroundColor: '#020908' }}>
-                  <span style={{ color: '#00FFA3', fontSize: '16px' }}>G</span>
+          <div className="px-5 py-5" style={{ borderBottom: '1px solid rgba(0,255,170,0.08)' }}>
+            <div className="flex items-center gap-3 px-3 py-3" style={{
+              background: 'rgba(0,255,170,0.03)',
+              border: '1px solid rgba(0,255,170,0.1)',
+              borderRadius: '10px',
+            }}>
+              <div className="relative flex-shrink-0">
+                <div className="rounded-full flex items-center justify-center"
+                  style={{
+                    width: '38px', height: '38px',
+                    background: 'linear-gradient(135deg, #061a12 0%, #0a2a1e 100%)',
+                    border: '1px solid rgba(0,255,170,0.2)',
+                  }}>
+                  <span style={{ color: '#00D49A', fontSize: '15px', fontWeight: 600 }}>G</span>
                 </div>
-                <div className="absolute bottom-0 right-0 rounded-full" 
-                  style={{ width: '10px', height: '10px', backgroundColor: '#00FFA3', border: '2px solid #040F0E' }}></div>
+                <div className="absolute bottom-0 right-0 rounded-full"
+                  style={{ width: '9px', height: '9px', backgroundColor: '#00C988', border: '2px solid #050D0B' }}/>
               </div>
-              <div className="flex-1">
-                <div style={{ color: '#E6F1EF', fontSize: '14px', fontWeight: 500 }}>Guest User</div>
-                <div style={{ color: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
+              <div className="flex-1 min-w-0">
+                <div style={{ color: '#EAF5F0', fontSize: '13.5px', fontWeight: 500, letterSpacing: '-0.01em' }}>Guest User</div>
+                <div style={{ color: '#99C4BC', fontSize: '10.5px', fontFamily: 'JetBrains Mono, monospace', marginTop: '1px' }}>
                   Research Tier
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Navigation Menu */}
-          <nav className="flex-1 py-6">
-            {navItems.map((item, index) => (
-              <motion.button
-                key={item}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + index * 0.05, duration: 0.2, ease: 'linear' }}
-                onClick={() => {
-                  if (item === 'Settings') {
-                    navigate('/settings');
-                  } else {
-                    setActiveNav(item);
-                  }
-                }}
-                className="w-full text-left px-6 py-3 transition-all relative"
-                style={{
-                  color: activeNav === item ? '#00FFA3' : '#8FA9A3',
-                  backgroundColor: activeNav === item ? '#071512' : 'transparent',
-                  fontSize: '14px',
-                  fontWeight: 500
-                }}
-                onMouseEnter={(e) => {
-                  if (activeNav !== item) {
-                    e.currentTarget.style.color = '#00FFA3';
-                    e.currentTarget.style.backgroundColor = 'rgba(15,46,43,0.5)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (activeNav !== item) {
-                    e.currentTarget.style.color = '#8FA9A3';
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                {activeNav === item && (
-                  <div className="absolute left-0 top-0 bottom-0" 
-                    style={{ width: '3px', backgroundColor: '#00FFA3' }}></div>
-                )}
-                {item}
-              </motion.button>
-            ))}
+          {/* Navigation */}
+          <nav className="flex-1 px-3 py-4 space-y-0.5">
+            {navItems.map(({ label, icon: Icon }, index) => {
+              const isActive = activeNav === label;
+              return (
+                <motion.button
+                  key={label}
+                  initial={{ opacity: 0, x: -6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.08 + index * 0.04, duration: 0.25, ease: [0.25, 0, 0.1, 1] }}
+                  onClick={() => {
+                    if (label === 'Settings') navigate('/settings');
+                    else setActiveNav(label);
+                  }}
+                  className="w-full text-left flex items-center gap-3 px-3 py-2.5 transition-all relative"
+                  style={{
+                    borderRadius: '9px',
+                    color: isActive ? '#00FFA3' : '#8DBEB5',
+                    background: isActive ? 'rgba(0,255,170,0.06)' : 'transparent',
+                    fontSize: '13.5px',
+                    fontWeight: isActive ? 500 : 400,
+                    border: isActive ? '1px solid rgba(0,255,170,0.14)' : '1px solid transparent',
+                    transition: 'all 180ms cubic-bezier(0.2,0,0,1)',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.color = '#C0DCD6';
+                      e.currentTarget.style.background = 'rgba(0,255,170,0.04)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.color = '#8DBEB5';
+                      e.currentTarget.style.background = 'transparent';
+                    }
+                  }}
+                >
+                  <Icon style={{ width: '15px', height: '15px', flexShrink: 0, opacity: isActive ? 1 : 0.7 }} />
+                  {label}
+                </motion.button>
+              );
+            })}
           </nav>
 
           {/* System Status Block */}
-          <div className="p-6 border-t" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
-            <div className="uppercase mb-3" 
-              style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', letterSpacing: '0.05em' }}>
+          <div className="px-5 py-5" style={{ borderTop: '1px solid rgba(0,255,170,0.08)' }}>
+            <div className="uppercase mb-3"
+              style={{ color: '#7AA89E', fontFamily: 'JetBrains Mono, monospace', fontSize: '9.5px', letterSpacing: '0.08em' }}>
               System Status
             </div>
-            <div className="space-y-1.5" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
-              <div className="flex items-center gap-2">
-                <span style={{ color: '#8FA9A3' }}>CRDT:</span>
-                <span style={{ color: '#00FFA3' }}>SYNCED</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span style={{ color: '#8FA9A3' }}>WASM ENGINE:</span>
-                <span style={{ color: '#00FFA3' }}>READY</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span style={{ color: '#8FA9A3' }}>LOCAL-FIRST:</span>
-                <span style={{ color: '#00FFA3' }}>ACTIVE</span>
-              </div>
+            <div className="space-y-2" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10.5px' }}>
+              {[
+                { icon: Wifi,      label: 'CRDT',        value: 'SYNCED', ok: true },
+                { icon: Cpu,       label: 'WASM ENGINE', value: 'READY',  ok: true },
+                { icon: HardDrive, label: 'LOCAL-FIRST', value: 'ACTIVE', ok: true },
+              ].map(({ icon: StatusIcon, label, value, ok }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <StatusIcon style={{ width: '10px', height: '10px', color: ok ? '#00C988' : '#C05050', flexShrink: 0 }}/>
+                  <span style={{ color: '#7AA89E' }}>{label}:</span>
+                  <span style={{ color: ok ? '#00FFA3' : '#FF5050' }}>{value}</span>
+                </div>
+              ))}
             </div>
           </div>
+
         </div>
       </motion.aside>
 
-      {/* MAIN CONTENT AREA */}
+      {/* â”€â”€ MAIN CONTENT AREA â”€â”€ */}
       <main className="flex-1 relative z-10" style={{ overflowY: 'auto' }}>
-        <div className="px-12 py-10">
+        <div className="px-10 py-9">
+
           {/* Header Row */}
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.3, ease: 'linear' }}
-            className="flex items-start justify-between mb-10"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.32, ease: [0.25, 0, 0.1, 1] }}
+            className="flex items-start justify-between mb-9"
           >
             <div>
-              <h1 className="mb-2" style={{ color: '#E6F1EF', fontSize: 'clamp(32px, 2.5vw, 48px)', fontWeight: 600 }}>
+              <h1 style={{
+                color: '#EAF6F1',
+                fontSize: 'clamp(28px, 2.2vw, 42px)',
+                fontWeight: 620,
+                letterSpacing: '-0.025em',
+                lineHeight: 1.1,
+                marginBottom: '8px',
+              }}>
                 My Projects
               </h1>
-              <p style={{ color: '#8FA9A3', fontSize: 'clamp(14px, 1vw, 18px)' }}>
+              <p style={{ color: '#9EC5BC', fontSize: 'clamp(13px, 0.9vw, 15px)', lineHeight: 1.5, maxWidth: '420px' }}>
                 Manage simulations, collaborate in real-time, and analyze post-mortems.
               </p>
             </div>
-            <button 
+            <button
               onClick={() => navigate('/workspace')}
-              className="flex items-center gap-2 transition-all"
-              style={{ 
-                backgroundColor: '#00FFA3', 
-                color: '#020908', 
-                padding: '14px 28px', 
-                borderRadius: '4px',
-                fontSize: '14px',
-                fontWeight: 500
+              className="flex items-center gap-2 flex-shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)',
+                color: '#020F0A',
+                padding: '11px 22px',
+                borderRadius: '10px',
+                fontSize: '13.5px',
+                fontWeight: 600,
+                letterSpacing: '-0.01em',
+                boxShadow: '0 1px 0 0 rgba(255,255,255,0.12) inset, 0 4px 14px rgba(0,180,130,0.25)',
+                transition: 'all 160ms cubic-bezier(0.2,0,0,1)',
+                border: 'none',
+                cursor: 'pointer',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#00D98C'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00FFA3'}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #00E5AA 0%, #00C990 100%)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 1px 0 0 rgba(255,255,255,0.15) inset, 0 6px 20px rgba(0,180,130,0.32)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 1px 0 0 rgba(255,255,255,0.12) inset, 0 4px 14px rgba(0,180,130,0.25)';
+              }}
             >
-              <Plus style={{ width: '18px', height: '18px' }} />
+              <Plus style={{ width: '16px', height: '16px' }} />
               <span>New Project</span>
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', opacity: 0.8 }}>INIT</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.65, letterSpacing: '0.05em' }}>INIT</span>
             </button>
           </motion.div>
 
-          {/* Join Session Panel */}
+          {/* â”€â”€ Join Live Session Panel â”€â”€ */}
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.3, ease: 'linear' }}
-            className="border mb-12 p-8"
-            style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '4px' }}
+            transition={{ delay: 0.28, duration: 0.32, ease: [0.25, 0, 0.1, 1] }}
+            className="mb-10"
+            style={{
+              background: 'linear-gradient(135deg, #040F0E 0%, #061512 100%)',
+              border: '1px solid rgba(0,255,170,0.12)',
+              borderTop: '1px solid rgba(0,255,170,0.18)',
+              borderRadius: '16px',
+              padding: '28px 28px',
+              boxShadow: '0 8px 28px rgba(0,0,0,0.3)',
+            }}
           >
-            <h2 className="mb-2" style={{ color: '#E6F1EF', fontSize: '22px', fontWeight: 600 }}>
-              Join Live Session
-            </h2>
-            <p className="mb-6" style={{ color: '#8FA9A3', fontSize: '14px' }}>
-              Paste an invite link to instantly join a collaborative simulation.
-            </p>
-            <div className="flex gap-3">
+            <div className="flex items-start gap-3 mb-5">
+              <div style={{
+                width: '36px', height: '36px', borderRadius: '9px', flexShrink: 0,
+                background: 'rgba(0,255,170,0.06)',
+                border: '1px solid rgba(0,255,170,0.14)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Users style={{ width: '16px', height: '16px', color: '#00C988' }}/>
+              </div>
+              <div>
+                <h2 style={{ color: '#E0F4EE', fontSize: '16px', fontWeight: 600, letterSpacing: '-0.02em', marginBottom: '3px' }}>
+                  Join Live Session
+                </h2>
+                <p style={{ color: '#9EC5BC', fontSize: '13px', lineHeight: 1.5 }}>
+                  Paste an invite link to instantly join a collaborative simulation.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2.5">
               <input
                 type="text"
                 value={inviteLink}
                 onChange={(e) => setInviteLink(e.target.value)}
                 placeholder="https://infrazero.dev/invite/..."
-                className="flex-1 border transition-all px-4 py-3"
                 style={{
-                  backgroundColor: '#020908',
-                  borderColor: 'rgba(0,255,170,0.3)',
-                  color: '#E6F1EF',
+                  flex: 1,
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(0,255,170,0.15)',
+                  borderRadius: '9px',
+                  color: '#C8E0DA',
                   fontFamily: 'JetBrains Mono, monospace',
-                  fontSize: '13px',
-                  borderRadius: '2px',
-                  outline: 'none'
+                  fontSize: '12.5px',
+                  padding: '10px 14px',
+                  outline: 'none',
+                  transition: 'border-color 180ms ease',
                 }}
-                onFocus={(e) => e.currentTarget.style.borderColor = '#00FFA3'}
-                onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'}
+                onFocus={(e) => e.currentTarget.style.borderColor = 'rgba(0,255,170,0.4)'}
+                onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(0,255,170,0.15)'}
               />
-              <button className="transition-all uppercase tracking-wider"
+              <button
                 style={{
-                  backgroundColor: '#00FFA3',
-                  color: '#020908',
-                  padding: '12px 32px',
-                  borderRadius: '2px',
-                  fontSize: '14px',
-                  fontWeight: 600
+                  background: 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)',
+                  color: '#020F0A',
+                  padding: '10px 24px',
+                  borderRadius: '9px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  boxShadow: '0 2px 10px rgba(0,180,130,0.2)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 160ms cubic-bezier(0.2,0,0,1)',
+                  flexShrink: 0,
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#00D98C'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00FFA3'}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #00E5AA 0%, #00C990 100%)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)'; e.currentTarget.style.transform = 'translateY(0)'; }}
               >
                 Join
               </button>
             </div>
             {inviteLink && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.2, ease: 'linear' }}
-                className="mt-4"
-                style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="mt-3 flex items-center gap-2"
+                style={{ color: '#00C988', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}
               >
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#00C988', flexShrink: 0 }}/>
                 SESSION VERIFIED
               </motion.div>
             )}
           </motion.div>
 
-          {/* Project Grid */}
+          {/* â”€â”€ Project Grid â”€â”€ */}
           {projects.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.map((project, index) => (
-                <motion.div
-                  key={project.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 + index * 0.08, duration: 0.3, ease: 'linear' }}
-                  className="border cursor-pointer group relative transition-all"
-                  style={{
-                    backgroundColor: '#040F0E',
-                    borderColor: 'rgba(0,255,170,0.2)',
-                    borderRadius: '2px'
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.borderColor = '#00FFA3';
-                    (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,255,170,0.2)';
-                    (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-                  }}
-                >
-                  {/* Hamburger menu — top-right of card */}
-                  <div ref={openMenuId === project.id ? menuRef : undefined} className="absolute top-3 right-3 z-20">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === project.id ? null : project.id); }}
-                      className="p-1.5 border transition-all"
-                      style={{
-                        backgroundColor: openMenuId === project.id ? '#0F2E2B' : '#040F0E',
-                        borderColor: openMenuId === project.id ? '#00FFA3' : 'rgba(0,255,170,0.35)',
-                        borderRadius: '2px',
-                        color: openMenuId === project.id ? '#00FFA3' : '#8FA9A3'
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
-                      onMouseLeave={(e) => {
-                        if (openMenuId !== project.id) {
-                          e.currentTarget.style.borderColor = 'rgba(0,255,170,0.35)';
-                          e.currentTarget.style.color = '#8FA9A3';
-                        }
-                      }}
-                    >
-                      <MoreVertical style={{ width: '14px', height: '14px' }} />
-                    </button>
-
-                    <AnimatePresence>
-                      {openMenuId === project.id && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -6, scale: 0.96 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -6, scale: 0.96 }}
-                          transition={{ duration: 0.15, ease: 'easeOut' }}
-                          className="absolute right-0 top-full mt-1 border"
-                          style={{
-                            backgroundColor: '#040F0E',
-                            borderColor: 'rgba(0,255,170,0.3)',
-                            borderRadius: '2px',
-                            minWidth: '160px',
-                            boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
-                          }}
-                        >
-                          {/* Share option */}
-                          <button
-                            onClick={(e) => handleShare(e, project.id, project.title)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
-                            style={{ color: '#8FA9A3', fontSize: '13px', fontFamily: 'Inter, sans-serif' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,255,170,0.07)'; e.currentTarget.style.color = '#00FFA3'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8FA9A3'; }}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {projects.map((project, index) => {
+                const radii = [14, 16, 14, 15, 16, 14];
+                const radius = radii[index % radii.length];
+                const statusColor = project.isFailed ? '#F0625A' : project.isDraft ? '#7A9E97' : '#00C988';
+                return (
+                  <motion.div
+                    key={project.id}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.38 + index * 0.07, duration: 0.3, ease: [0.25, 0, 0.1, 1] }}
+                    className="cursor-pointer group relative"
+                    style={{
+                      background: 'linear-gradient(160deg, #040F0C 0%, #061410 100%)',
+                      border: '1px solid rgba(0,255,170,0.1)',
+                      borderTop: '1px solid rgba(0,255,170,0.18)',
+                      borderRadius: `${radius}px`,
+                      boxShadow: '0 2px 0 0 rgba(0,255,170,0.04) inset, 0 10px 28px rgba(0,0,0,0.4)',
+                      transition: 'all 200ms cubic-bezier(0.2, 0, 0, 1)',
+                      overflow: 'hidden',
+                    }}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLDivElement;
+                      el.style.transform = 'translateY(-2px)';
+                      el.style.borderTopColor = 'rgba(0,255,170,0.28)';
+                      el.style.boxShadow = '0 2px 0 0 rgba(0,255,170,0.05) inset, 0 18px 44px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,255,170,0.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLDivElement;
+                      el.style.transform = 'translateY(0)';
+                      el.style.borderTopColor = 'rgba(0,255,170,0.18)';
+                      el.style.boxShadow = '0 2px 0 0 rgba(0,255,170,0.04) inset, 0 10px 28px rgba(0,0,0,0.4)';
+                    }}
+                  >
+                    {/* Context menu */}
+                    <div ref={openMenuId === project.id ? menuRef : undefined} className="absolute top-3 right-3 z-20">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === project.id ? null : project.id); }}
+                        className="p-1.5 transition-all"
+                        style={{
+                          background: openMenuId === project.id ? 'rgba(0,200,140,0.12)' : 'rgba(0,0,0,0.45)',
+                          border: `1px solid ${openMenuId === project.id ? 'rgba(0,200,140,0.35)' : 'rgba(0,200,140,0.15)'}`,
+                          borderRadius: '7px',
+                          color: openMenuId === project.id ? '#00C988' : '#4E7268',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(0,200,140,0.35)'; e.currentTarget.style.color = '#00C988'; }}
+                        onMouseLeave={(e) => {
+                          if (openMenuId !== project.id) {
+                            e.currentTarget.style.borderColor = 'rgba(0,200,140,0.15)';
+                            e.currentTarget.style.color = '#4E7268';
+                          }
+                        }}
+                      >
+                        <MoreVertical style={{ width: '13px', height: '13px' }} />
+                      </button>
+                      <AnimatePresence>
+                        {openMenuId === project.id && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                            transition={{ duration: 0.14, ease: 'easeOut' }}
+                            className="absolute right-0 top-full mt-1.5"
+                            style={{
+                            background: 'linear-gradient(160deg, #040F0C 0%, #061410 100%)',
+                              border: '1px solid rgba(0,255,170,0.15)',
+                              borderRadius: '11px',
+                              minWidth: '165px',
+                              boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+                              padding: '4px',
+                            }}
                           >
-                            {copiedId === project.id
-                              ? <Check style={{ width: '14px', height: '14px', color: '#00FFA3', flexShrink: 0 }} />
-                              : <Share2 style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-                            }
-                            <span>{copiedId === project.id ? 'Link Copied!' : 'Share Project'}</span>
-                          </button>
+                            <button
+                              onClick={(e) => handleShare(e, project.id, project.title)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all"
+                              style={{ color: '#9DBFB9', fontSize: '12.5px', borderRadius: '8px' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,200,140,0.08)'; e.currentTarget.style.color = '#00C988'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9DBFB9'; }}
+                            >
+                              {copiedId === project.id
+                                ? <Check style={{ width: '13px', height: '13px', color: '#00C988', flexShrink: 0 }} />
+                                : <Share2 style={{ width: '13px', height: '13px', flexShrink: 0 }} />}
+                              <span>{copiedId === project.id ? 'Link Copied!' : 'Share Project'}</span>
+                            </button>
+                            <div style={{ height: '1px', background: 'rgba(0,200,140,0.08)', margin: '2px 0' }} />
+                            <button
+                              onClick={(e) => handleDelete(e, project.id)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all"
+                              style={{ color: '#9DBFB9', fontSize: '12.5px', borderRadius: '8px' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(240,98,90,0.08)'; e.currentTarget.style.color = '#f0625a'; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#9DBFB9'; }}
+                            >
+                              <Trash2 style={{ width: '13px', height: '13px', flexShrink: 0 }} />
+                              <span>Delete Project</span>
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
 
-                          {/* Divider */}
-                          <div style={{ height: '1px', backgroundColor: 'rgba(0,255,170,0.1)' }} />
-
-                          {/* Delete option */}
-                          <button
-                            onClick={(e) => handleDelete(e, project.id)}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
-                            style={{ color: '#8FA9A3', fontSize: '13px', fontFamily: 'Inter, sans-serif' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,59,59,0.08)'; e.currentTarget.style.color = '#FF3B3B'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8FA9A3'; }}
-                          >
-                            <Trash2 style={{ width: '14px', height: '14px', flexShrink: 0 }} />
-                            <span>Delete Project</span>
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                  {/* Thumbnail */}
-                  <div className="relative border-b" 
-                    style={{ 
-                      height: '180px', 
-                      backgroundColor: '#020908', 
-                      borderColor: 'rgba(0,255,170,0.1)',
-                      backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.03) 1px, transparent 1px)',
-                      backgroundSize: '16px 16px'
+                    {/* Thumbnail */}
+                    <div className="relative" style={{
+                      height: '168px',
+                      background: 'linear-gradient(160deg, #020A08 0%, #040E0C 100%)',
+                      borderBottom: '1px solid rgba(0,255,170,0.08)',
+                      overflow: 'hidden',
                     }}>
-                    {/* Mini graph visualization */}
-                    <svg className="w-full h-full" viewBox="0 0 300 180" preserveAspectRatio="xMidYMid meet">
-                      <line x1="80" y1="60" x2="150" y2="90" stroke="rgba(0,255,170,0.3)" strokeWidth="1.5" />
-                      <line x1="220" y1="60" x2="150" y2="90" stroke="rgba(0,255,170,0.3)" strokeWidth="1.5" />
-                      <line x1="150" y1="90" x2="150" y2="130" stroke="rgba(0,255,170,0.3)" strokeWidth="1.5" />
-                      
-                      <rect x="60" y="50" width="40" height="20" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                      <rect x="200" y="50" width="40" height="20" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                      <rect x="130" y="80" width="40" height="20" fill="#040F0E" stroke="#00FFA3" strokeWidth="1.5" />
-                      <rect x="130" y="120" width="40" height="20" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                      
-                      {/* Animated dots */}
-                      <motion.circle r="2" fill="#00FFA3"
-                        animate={{ cy: [60, 90, 130], opacity: [1, 0.5, 0] }}
-                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}>
-                        <animate attributeName="cx" values="80;150;150" dur="2s" repeatCount="indefinite" />
-                      </motion.circle>
-                    </svg>
+                      <div style={{
+                        position: 'absolute', inset: 0,
+                        backgroundImage: 'radial-gradient(circle, rgba(0,255,170,0.04) 1px, transparent 1px)',
+                        backgroundSize: '18px 18px',
+                      }}/>
+                      <GraphThumbnail variant={index} failed={project.isFailed} />
 
-                    {/* Grade/Status Badge — moved to top-left to avoid hamburger overlap */}
-                    <div className="absolute top-3 left-3 px-2 py-1" 
-                      style={{ 
-                        backgroundColor: '#040F0E', 
-                        borderColor: project.grade ? '#00FFA3' : (project.isFailed ? '#FF3B3B' : '#8FA9A3'),
-                        border: '1px solid',
-                        borderRadius: '2px',
+                      {/* Status badge */}
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1.5 px-2 py-1" style={{
+                        background: 'rgba(4,14,12,0.88)',
+                        border: `1px solid ${project.grade ? 'rgba(0,200,140,0.28)' : project.isFailed ? 'rgba(240,98,90,0.28)' : 'rgba(120,160,155,0.22)'}`,
+                        borderRadius: '6px',
+                        backdropFilter: 'blur(6px)',
                         fontFamily: 'JetBrains Mono, monospace',
                         fontSize: '10px',
-                        color: project.grade ? '#00FFA3' : (project.isFailed ? '#FF3B3B' : '#8FA9A3')
+                        color: statusColor,
+                        letterSpacing: '0.04em',
                       }}>
-                      {project.grade ? `GRADE: ${project.grade}` : project.isDraft ? 'DRAFT' : 'FAILED'}
+                        <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0 }}/>
+                        {project.grade ? `GRADE ${project.grade}` : project.isDraft ? 'DRAFT' : 'FAILED'}
+                      </div>
+
+                      {/* Hover quick actions */}
+                      <div className="absolute top-3 left-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                        {([Play, FileText] as React.ComponentType<{ style?: React.CSSProperties }>[]).map((Icon, i) => (
+                          <button key={i} className="p-1.5 transition-all" style={{
+                            background: 'rgba(4,14,12,0.85)',
+                            border: '1px solid rgba(0,200,140,0.2)',
+                            borderRadius: '7px',
+                            color: '#4E7268',
+                          }}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(0,200,140,0.45)'; e.currentTarget.style.color = '#00C988'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,200,140,0.2)'; e.currentTarget.style.color = '#4E7268'; }}
+                          >
+                            <Icon style={{ width: '13px', height: '13px' }} />
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
-                    {/* Quick Actions (Hover Reveal) */}
-                    <div className="absolute top-3 left-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1.5 border transition-colors" 
-                        style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
-                        <Play style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
-                      </button>
-                      <button className="p-1.5 border transition-colors" 
-                        style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
-                        <FileText style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
-                      </button>
-
-                    </div>
-                  </div>
-
-                  {/* Card Content */}
-                  <div className="p-5">
-                    <h3 className="mb-2" style={{ color: '#E6F1EF', fontSize: '18px', fontWeight: 500 }}>
-                      {project.title}
-                    </h3>
-                    <div className="mb-3" 
-                      style={{ 
-                        color: project.statusColor, 
-                        fontFamily: 'JetBrains Mono, monospace', 
-                        fontSize: '12px' 
+                    {/* Card body */}
+                    <div style={{ padding: '16px 18px 18px' }}>
+                      <h3 style={{
+                        color: '#DCF0EA', fontSize: '15.5px', fontWeight: 560,
+                        letterSpacing: '-0.02em', marginBottom: '6px', lineHeight: 1.3,
                       }}>
-                      {project.status}
+                        {project.title}
+                      </h3>
+                      <div style={{
+                        color: statusColor, fontFamily: 'JetBrains Mono, monospace',
+                        fontSize: '11px', marginBottom: '10px', letterSpacing: '0.01em',
+                      }}>
+                        {project.status}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {project.isCollaborative && (
+                          <div style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#00C988', flexShrink: 0 }}/>
+                        )}
+                        <span style={{ color: '#7DADA5', fontFamily: 'JetBrains Mono, monospace', fontSize: '10.5px' }}>
+                          {project.lastEdited}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2" 
-                      style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
-                      {project.isCollaborative && (
-                        <div className="rounded-full" 
-                          style={{ width: '6px', height: '6px', backgroundColor: '#00FFA3' }}></div>
-                      )}
-                      <span>{project.lastEdited}</span>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
             </div>
           ) : (
-            /* Empty State */
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.4, duration: 0.4, ease: 'linear' }}
+              transition={{ delay: 0.4, duration: 0.4, ease: 'easeOut' }}
               className="text-center py-20"
             >
-              <h3 className="mb-4" style={{ color: '#E6F1EF', fontSize: '28px', fontWeight: 600 }}>
+              <h3 style={{ color: '#DCF0EA', fontSize: '26px', fontWeight: 600, letterSpacing: '-0.025em', marginBottom: '12px' }}>
                 No Active Architectures
               </h3>
-              <p className="mb-8" style={{ color: '#8FA9A3', fontSize: '16px', maxWidth: '500px', margin: '0 auto 32px' }}>
+              <p style={{ color: '#9EC5BC', fontSize: '14px', maxWidth: '440px', margin: '0 auto 28px', lineHeight: 1.6 }}>
                 Initialize your first distributed system and run a deterministic simulation.
               </p>
-              <button className="transition-all uppercase tracking-wider"
+              <button
                 style={{
-                  backgroundColor: '#00FFA3',
-                  color: '#020908',
-                  padding: '16px 40px',
-                  borderRadius: '4px',
-                  fontSize: '14px',
-                  fontWeight: 600
+                  background: 'linear-gradient(135deg, #00D49A 0%, #00B882 100%)',
+                  color: '#020F0A', padding: '12px 32px', borderRadius: '11px',
+                  fontSize: '13.5px', fontWeight: 600, letterSpacing: '0.01em',
+                  border: 'none', cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(0,180,130,0.25)',
+                  transition: 'all 160ms cubic-bezier(0.2,0,0,1)',
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#00D98C'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00FFA3'}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
               >
                 Initialize Lab
               </button>
