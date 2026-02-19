@@ -2,6 +2,70 @@
 @import './tailwind.css';
 @import './theme.css';
 
+/* ─────────────────────────────────────────────────────────────
+   InfraZero Design Tokens
+   ───────────────────────────────────────────────────────────── */
+:root {
+  /* Accent scale — use primary ONLY on CTAs / key highlights */
+  --iz-accent-primary:  #19f0b4;
+  --iz-accent-muted:    #2ad1a0;
+  --iz-accent-soft:     #1a7f63;
+  --iz-accent-dim:      #0e3b2f;
+
+  /* Text hierarchy — rely on opacity, not hue */
+  --iz-text-primary:    #e6fff6;
+  --iz-text-secondary:  rgba(230,255,246,0.72);
+  --iz-text-tertiary:   rgba(230,255,246,0.48);
+
+  /* Surface layers */
+  --iz-surface-1:       #050807;
+  --iz-surface-2:       #07110f;
+  --iz-surface-3:       #0a1714;
+
+  /* Shared easing */
+  --iz-ease-out:        cubic-bezier(0.22, 1, 0.36, 1);
+  --iz-duration:        200ms;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Utility: input focus state
+   ───────────────────────────────────────────────────────────── */
+.iz-input {
+  transition: border-color var(--iz-duration) var(--iz-ease-out),
+              box-shadow   var(--iz-duration) var(--iz-ease-out);
+}
+.iz-input:focus {
+  outline: none;
+  border-color: rgba(25, 240, 180, 0.38) !important;
+  box-shadow: 0 0 0 3px rgba(25, 240, 180, 0.08);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Utility: iz-card interactive surface
+   ───────────────────────────────────────────────────────────── */
+.iz-card-hover {
+  transition: transform    var(--iz-duration) var(--iz-ease-out),
+              box-shadow   var(--iz-duration) var(--iz-ease-out),
+              border-color var(--iz-duration) var(--iz-ease-out);
+}
+.iz-card-hover:hover {
+  transform: translateY(-2px);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Utility: iz-interactive-btn lift
+   ───────────────────────────────────────────────────────────── */
+.iz-lift {
+  transition: transform   var(--iz-duration) var(--iz-ease-out),
+              filter      var(--iz-duration) var(--iz-ease-out);
+}
+.iz-lift:hover  { transform: translateY(-1px); filter: brightness(1.06); }
+.iz-lift:active { transform: translateY(0px);  filter: brightness(0.97); }
+.iz-lift:focus-visible {
+  outline: 2px solid rgba(25, 240, 180, 0.5);
+  outline-offset: 3px;
+}
+
 /* ── Green animated border button ── */
 @keyframes izAnimateTop {
   0%   { transform: translateX(100%); }
