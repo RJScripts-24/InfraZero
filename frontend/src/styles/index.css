@@ -1,3 +1,42 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* ── Green animated border button ── */
+@keyframes izAnimateTop {
+  0%   { transform: translateX(100%); }
+  100% { transform: translateX(-100%); }
+}
+@keyframes izAnimateRight {
+  0%   { transform: translateY(100%); }
+  100% { transform: translateY(-100%); }
+}
+@keyframes izAnimateBottom {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes izAnimateLeft {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.iz-btn-green {
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(-30deg, #00FFA3 50%, #00CC88 50%) !important;
+}
+
+.iz-btn-green::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.15);
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.iz-btn-green:hover::before {
+  opacity: 1;
+}

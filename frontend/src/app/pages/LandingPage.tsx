@@ -52,11 +52,13 @@ export default function LandingPage() {
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
                 Try Demo
               </button>
-              <button onClick={() => navigate('/auth')} className="uppercase tracking-wider transition-all"
-                style={{ backgroundColor: '#00FFA3', color: '#030D0C', borderRadius: '2px',
-                  padding: 'clamp(8px, 0.8vw, 14px) clamp(20px, 1.8vw, 32px)', fontSize: 'clamp(12px, 0.9vw, 16px)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#00D98C'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00FFA3'}>
+              <button onClick={() => navigate('/auth')} className="uppercase tracking-wider transition-all iz-btn-green"
+                style={{ color: '#030D0C', borderRadius: '2px',
+                  padding: 'clamp(8px, 0.8vw, 14px) clamp(20px, 1.8vw, 32px)', fontSize: 'clamp(12px, 0.9vw, 16px)' }}>
+                <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
                 Get Started
               </button>
             </div>
@@ -80,8 +82,14 @@ export default function LandingPage() {
                 <div className="flex flex-col gap-3 mt-4 pt-4 border-t" style={{ borderColor: 'rgba(0,255,170,0.1)' }}>
                   <button onClick={() => navigate('/auth')} className="px-5 py-3 text-sm uppercase tracking-wider border w-full" 
                     style={{ borderColor: 'rgba(0,255,170,0.3)', color: '#8FA9A3', borderRadius: '2px' }}>Try Demo</button>
-                  <button onClick={() => navigate('/auth')} className="px-5 py-3 text-sm uppercase tracking-wider w-full" 
-                    style={{ backgroundColor: '#00FFA3', color: '#030D0C', borderRadius: '2px' }}>Get Started</button>
+                  <button onClick={() => navigate('/auth')} className="px-5 py-3 text-sm uppercase tracking-wider w-full iz-btn-green" 
+                    style={{ color: '#030D0C', borderRadius: '2px' }}>
+                    <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                    Get Started
+                  </button>
                 </div>
               </div>
             </motion.div>
@@ -146,11 +154,13 @@ export default function LandingPage() {
         {/* CTA Buttons */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} 
           transition={{ delay: 0.3, duration: 0.4, ease: 'linear' }} className="flex flex-wrap items-center justify-center gap-4 mb-20">
-          <button onClick={() => navigate('/auth')} className="transition-all"
-            style={{ backgroundColor: '#00FFA3', color: '#020908', borderRadius: '4px',
-              padding: 'clamp(16px, 1.4vw, 24px) clamp(32px, 2.8vw, 52px)', fontSize: 'clamp(15px, 1.2vw, 20px)' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#00D98C'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00FFA3'}>
+          <button onClick={() => navigate('/auth')} className="transition-all iz-btn-green"
+            style={{ color: '#020908', borderRadius: '4px',
+              padding: 'clamp(16px, 1.4vw, 24px) clamp(32px, 2.8vw, 52px)', fontSize: 'clamp(15px, 1.2vw, 20px)' }}>
+            <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+            <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+            <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+            <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
             Try the Demo
           </button>
           <button className="border transition-all flex items-center gap-3"
