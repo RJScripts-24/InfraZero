@@ -33,13 +33,14 @@ export default function TextType({
   style = {},
 }: TextTypeProps) {
   const [displayedText, setDisplayedText] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [done, setDone] = useState(false);
   const cursorRef = useRef<HTMLSpanElement>(null);
-  
-  // Combine text and texts arrays
-  const allTexts = [...text, ...texts];
 
+  // Use only the first string from text or texts
+  const allTexts = [...text, ...texts];
+  const firstText = allTexts[0] || '';
+
+  // Cursor blink animation (always active)
   useEffect(() => {
     if (showCursor && cursorRef.current) {
       gsap.to(cursorRef.current, {
@@ -52,51 +53,25 @@ export default function TextType({
     }
   }, [showCursor, cursorBlinkDuration]);
 
+  // Type once, then stop — cursor keeps blinking
   useEffect(() => {
-    if (allTexts.length === 0) return;
-
-    const currentText = allTexts[currentIndex];
-    let timeout: NodeJS.Timeout;
-
+    if (!firstText) return;
+    if (done) return;
+    if (displayedText === firstText) {
+      setDone(true);
+      return;
+    }
     const getSpeed = () => {
       if (variableSpeedEnabled) {
         return Math.random() * (variableSpeedMax - variableSpeedMin) + variableSpeedMin;
       }
-      return isDeleting ? deletingSpeed : typingSpeed;
+      return typingSpeed;
     };
-
-    if (!isDeleting && displayedText === currentText) {
-      timeout = setTimeout(() => {
-        if (allTexts.length > 1) {
-          setIsDeleting(true);
-        }
-      }, pauseDuration);
-    } else if (isDeleting && displayedText === '') {
-      setIsDeleting(false);
-      setCurrentIndex((prev) => (prev + 1) % allTexts.length);
-    } else {
-      timeout = setTimeout(() => {
-        setDisplayedText((prev) =>
-          isDeleting
-            ? currentText.substring(0, prev.length - 1)
-            : currentText.substring(0, prev.length + 1)
-        );
-      }, getSpeed());
-    }
-
+    const timeout = setTimeout(() => {
+      setDisplayedText((prev) => firstText.substring(0, prev.length + 1));
+    }, getSpeed());
     return () => clearTimeout(timeout);
-  }, [
-    displayedText,
-    isDeleting,
-    currentIndex,
-    allTexts,
-    typingSpeed,
-    deletingSpeed,
-    pauseDuration,
-    variableSpeedEnabled,
-    variableSpeedMin,
-    variableSpeedMax,
-  ]);
+  }, [displayedText, done, firstText, typingSpeed, variableSpeedEnabled, variableSpeedMin, variableSpeedMax]);
 
   return (
     <span className={className} style={style}>
