@@ -1,15 +1,29 @@
-import { motion } from 'motion/react';
-import { useState } from 'react';
-import { Play, FileText, MoreVertical, Plus } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { useState, useEffect, useRef } from 'react';
+import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [inviteLink, setInviteLink] = useState('');
   const [activeNav, setActiveNav] = useState('My Projects');
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Mock project data
-  const projects = [
+  const [projects, setProjects] = useState([
     {
       id: 1,
       title: 'Velocis',
@@ -64,7 +78,22 @@ export default function DashboardPage() {
       isCollaborative: true,
       grade: 'B+'
     }
-  ];
+  ]);
+
+  const handleShare = (e: React.MouseEvent, projectId: number, projectTitle: string) => {
+    e.stopPropagation();
+    const mockLink = `https://infrazero.dev/invite/${projectTitle.toLowerCase().replace(/\s+/g, '-')}-${projectId}`;
+    navigator.clipboard.writeText(mockLink).catch(() => {});
+    setCopiedId(projectId);
+    setTimeout(() => setCopiedId(null), 2000);
+    setOpenMenuId(null);
+  };
+
+  const handleDelete = (e: React.MouseEvent, projectId: number) => {
+    e.stopPropagation();
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    setOpenMenuId(null);
+  };
 
   const navItems = ['My Projects', 'Shared with Me', 'Library of Doom', 'Settings'];
 
@@ -288,14 +317,85 @@ export default function DashboardPage() {
                     borderRadius: '2px'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = '#00FFA3';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    (e.currentTarget as HTMLDivElement).style.borderColor = '#00FFA3';
+                    (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)';
-                    e.currentTarget.style.transform = 'translateY(0)';
+                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,255,170,0.2)';
+                    (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
                   }}
                 >
+                  {/* Hamburger menu — top-right of card */}
+                  <div ref={openMenuId === project.id ? menuRef : undefined} className="absolute top-3 right-3 z-20">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === project.id ? null : project.id); }}
+                      className="p-1.5 border transition-all"
+                      style={{
+                        backgroundColor: openMenuId === project.id ? '#0F2E2B' : '#040F0E',
+                        borderColor: openMenuId === project.id ? '#00FFA3' : 'rgba(0,255,170,0.35)',
+                        borderRadius: '2px',
+                        color: openMenuId === project.id ? '#00FFA3' : '#8FA9A3'
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
+                      onMouseLeave={(e) => {
+                        if (openMenuId !== project.id) {
+                          e.currentTarget.style.borderColor = 'rgba(0,255,170,0.35)';
+                          e.currentTarget.style.color = '#8FA9A3';
+                        }
+                      }}
+                    >
+                      <MoreVertical style={{ width: '14px', height: '14px' }} />
+                    </button>
+
+                    <AnimatePresence>
+                      {openMenuId === project.id && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                          transition={{ duration: 0.15, ease: 'easeOut' }}
+                          className="absolute right-0 top-full mt-1 border"
+                          style={{
+                            backgroundColor: '#040F0E',
+                            borderColor: 'rgba(0,255,170,0.3)',
+                            borderRadius: '2px',
+                            minWidth: '160px',
+                            boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+                          }}
+                        >
+                          {/* Share option */}
+                          <button
+                            onClick={(e) => handleShare(e, project.id, project.title)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
+                            style={{ color: '#8FA9A3', fontSize: '13px', fontFamily: 'Inter, sans-serif' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(0,255,170,0.07)'; e.currentTarget.style.color = '#00FFA3'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8FA9A3'; }}
+                          >
+                            {copiedId === project.id
+                              ? <Check style={{ width: '14px', height: '14px', color: '#00FFA3', flexShrink: 0 }} />
+                              : <Share2 style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                            }
+                            <span>{copiedId === project.id ? 'Link Copied!' : 'Share Project'}</span>
+                          </button>
+
+                          {/* Divider */}
+                          <div style={{ height: '1px', backgroundColor: 'rgba(0,255,170,0.1)' }} />
+
+                          {/* Delete option */}
+                          <button
+                            onClick={(e) => handleDelete(e, project.id)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left"
+                            style={{ color: '#8FA9A3', fontSize: '13px', fontFamily: 'Inter, sans-serif' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,59,59,0.08)'; e.currentTarget.style.color = '#FF3B3B'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#8FA9A3'; }}
+                          >
+                            <Trash2 style={{ width: '14px', height: '14px', flexShrink: 0 }} />
+                            <span>Delete Project</span>
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                   {/* Thumbnail */}
                   <div className="relative border-b" 
                     style={{ 
@@ -324,16 +424,16 @@ export default function DashboardPage() {
                       </motion.circle>
                     </svg>
 
-                    {/* Grade/Status Badge */}
-                    <div className="absolute top-3 right-3 px-2 py-1" 
+                    {/* Grade/Status Badge — moved to top-left to avoid hamburger overlap */}
+                    <div className="absolute top-3 left-3 px-2 py-1" 
                       style={{ 
                         backgroundColor: '#040F0E', 
-                        borderColor: project.grade ? '#00FFA3' : '#8FA9A3',
+                        borderColor: project.grade ? '#00FFA3' : (project.isFailed ? '#FF3B3B' : '#8FA9A3'),
                         border: '1px solid',
                         borderRadius: '2px',
                         fontFamily: 'JetBrains Mono, monospace',
                         fontSize: '10px',
-                        color: project.grade ? '#00FFA3' : '#8FA9A3'
+                        color: project.grade ? '#00FFA3' : (project.isFailed ? '#FF3B3B' : '#8FA9A3')
                       }}>
                       {project.grade ? `GRADE: ${project.grade}` : project.isDraft ? 'DRAFT' : 'FAILED'}
                     </div>
@@ -352,12 +452,7 @@ export default function DashboardPage() {
                         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
                         <FileText style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
                       </button>
-                      <button className="p-1.5 border transition-colors" 
-                        style={{ backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.3)', borderRadius: '2px' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#00FFA3'; e.currentTarget.style.color = '#00FFA3'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)'; e.currentTarget.style.color = '#8FA9A3'; }}>
-                        <MoreVertical style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
-                      </button>
+
                     </div>
                   </div>
 
