@@ -1,9 +1,78 @@
 import { motion } from 'motion/react';
 import { Github, UserCircle } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
 
 export default function AuthPage() {
   const navigate = useNavigate();
+
+  // ── Live simulation state ──────────────────────────────────────────
+  const LOGS = [
+    { t: 'info',    msg: '[00:00:01] Simulation seed: 0xDEADBEEF' },
+    { t: 'ok',      msg: '[00:00:02] API Gateway  ▶  healthy  (p50: 12ms)' },
+    { t: 'ok',      msg: '[00:00:03] Auth Service ▶  healthy  (p50: 8ms)' },
+    { t: 'warn',    msg: '[00:00:05] Redis Cache  ▷  eviction  pressure +14%' },
+    { t: 'ok',      msg: '[00:00:06] Postgres     ▶  healthy  (conn: 42/100)' },
+    { t: 'info',    msg: '[00:00:08] Load Balancer rr-routing  rps: 4 210' },
+    { t: 'error',   msg: '[00:00:11] Queue Worker  ✗  backlog   spike → 1 800 msgs' },
+    { t: 'warn',    msg: '[00:00:13] Postgres      ▷  slow query  p99: 340ms' },
+    { t: 'ok',      msg: '[00:00:15] Auto-scaled   +2 workers  spawned' },
+    { t: 'info',    msg: '[00:00:17] CRDT merge    delta-state  synced' },
+    { t: 'ok',      msg: '[00:00:19] Queue backlog ▶  draining  (1 200 msgs)' },
+    { t: 'ok',      msg: '[00:00:22] Chaos test    ✓  system stable  post-event' },
+  ];
+
+  const [logLines, setLogLines]   = useState<typeof LOGS>([LOGS[0]]);
+  const [tick,     setTick]       = useState(0);
+  const [rps,      setRps]        = useState(4210);
+  const [p50,      setP50]        = useState(12);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+      setLogLines(prev => {
+        const next = LOGS[(prev.length) % LOGS.length];
+        const updated = [...prev, next];
+        return updated.length > 6 ? updated.slice(-6) : updated;
+      });
+      setRps(r  => Math.max(3800, Math.min(5200, r  + Math.round((Math.random() - 0.48) * 180))));
+      setP50(p  => Math.max(8,    Math.min(42,   p  + Math.round((Math.random() - 0.5)  * 4))));
+    }, 1800);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Node layout (viewBox 600 × 520) ────────────────────────────────
+  const nodes = [
+    { id: 'cdn',   label: 'CDN',        x: 300, y:  38, active: true  },
+    { id: 'lb',    label: 'Load Bal.',   x: 300, y: 118, active: true  },
+    { id: 'gw',    label: 'API GW',      x: 300, y: 200, active: true  },
+    { id: 'auth',  label: 'Auth Svc',    x: 155, y: 290, active: true  },
+    { id: 'api',   label: 'API Svc',     x: 445, y: 290, active: true  },
+    { id: 'db',    label: 'Postgres',    x: 155, y: 385, active: tick % 8 < 6 },
+    { id: 'cache', label: 'Redis',       x: 355, y: 385, active: true  },
+    { id: 'queue', label: 'Queue',       x: 510, y: 385, active: true  },
+    { id: 'work',  label: 'Worker',      x: 510, y: 470, active: tick % 5 < 4 },
+  ] as const;
+
+  const edges = [
+    { x1:300,y1:68,  x2:300,y2:98  },
+    { x1:300,y1:148, x2:300,y2:180 },
+    { x1:270,y1:218, x2:185,y2:268 },
+    { x1:330,y1:218, x2:415,y2:268 },
+    { x1:155,y1:320, x2:155,y2:360 },
+    { x1:200,y1:295, x2:315,y2:380 },
+    { x1:415,y1:308, x2:380,y2:360 },
+    { x1:470,y1:308, x2:495,y2:360 },
+    { x1:510,y1:415, x2:510,y2:450 },
+  ];
+
+  const packetPaths = [
+    { d:'M 300 38 L 300 118 L 300 200 L 155 290 L 155 385', dur:'3.2s', delay:'0s',   color:'#00FFA3' },
+    { d:'M 300 38 L 300 118 L 300 200 L 445 290 L 355 385', dur:'2.8s', delay:'-1.4s',color:'#00FFA3' },
+    { d:'M 300 38 L 300 118 L 300 200 L 445 290 L 510 385 L 510 470', dur:'4s', delay:'-2s', color:'#26D980' },
+    { d:'M 300 200 L 155 290 L 155 385', dur:'2s', delay:'-0.8s', color:'rgba(255,200,0,0.9)' },
+  ];
 
   return (
     <div className="min-h-screen flex" style={{ 
@@ -44,152 +113,148 @@ export default function AuthPage() {
           }} />
         </div>
 
-        {/* Main Visual - Abstract System Blueprint */}
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="relative" style={{ 
-            width: '100%',
-            maxWidth: '600px',
-            height: 'clamp(400px, 35vw, 500px)'
-          }}>
-            <svg className="w-full h-full" viewBox="0 0 600 500" preserveAspectRatio="xMidYMid meet">
-              {/* Edges */}
-              <line x1="150" y1="100" x2="300" y2="180" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-              <line x1="450" y1="100" x2="300" y2="180" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-              <line x1="300" y1="180" x2="200" y2="320" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-              <line x1="300" y1="180" x2="400" y2="320" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-              <line x1="200" y1="320" x2="300" y2="400" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
-              <line x1="400" y1="320" x2="300" y2="400" stroke="rgba(0,255,170,0.3)" strokeWidth="2" />
+        {/* ── MAIN VISUAL ── */}
+        <div className="flex-1 flex flex-col items-center justify-center" style={{ gap: 'clamp(16px, 1.5vw, 24px)' }}>
 
-              {/* Animated pulse along edges */}
-              <motion.circle
-                r="4"
-                fill="#00FFA3"
-                animate={{
-                  offsetDistance: ['0%', '100%'],
-                  opacity: [0.8, 0.3, 0.8]
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: 'linear'
-                }}
-              >
-                <animateMotion dur="4s" repeatCount="indefinite">
-                  <mpath href="#path1" />
-                </animateMotion>
-              </motion.circle>
-              <path id="path1" d="M 150 100 L 300 180 L 200 320 L 300 400" fill="none" />
-
-              <motion.circle
-                r="4"
-                fill="#00FFA3"
-                animate={{
-                  opacity: [0.8, 0.3, 0.8]
-                }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: 'linear',
-                  delay: 2
-                }}
-              >
-                <animateMotion dur="4s" repeatCount="indefinite">
-                  <mpath href="#path2" />
-                </animateMotion>
-              </motion.circle>
-              <path id="path2" d="M 450 100 L 300 180 L 400 320 L 300 400" fill="none" />
-
-              {/* Nodes */}
-              <g>
-                <rect x="110" y="70" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                <text x="150" y="105" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                  Frontend
-                </text>
-              </g>
-
-              <g>
-                <rect x="410" y="70" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                <text x="450" y="105" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                  Auth
-                </text>
-              </g>
-
-              <g>
-                <rect x="260" y="150" width="80" height="60" fill="#040F0E" stroke="#00FFA3" strokeWidth="2" />
-                <text x="300" y="185" textAnchor="middle" fill="#00FFA3" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                  API
-                </text>
-              </g>
-
-              <g>
-                <rect x="160" y="290" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                <text x="200" y="325" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                  Database
-                </text>
-              </g>
-
-              <g>
-                <rect x="360" y="290" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                <text x="400" y="325" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                  Cache
-                </text>
-              </g>
-
-              <g>
-                <rect x="260" y="370" width="80" height="60" fill="#040F0E" stroke="rgba(0,255,170,0.4)" strokeWidth="1" />
-                <text x="300" y="405" textAnchor="middle" fill="#E6F1EF" fontSize="11" fontFamily="JetBrains Mono, monospace">
-                  Queue
-                </text>
-              </g>
-            </svg>
-
-            {/* Floating Log Snippets */}
-            <motion.div
-              className="absolute"
-              style={{
-                top: '15%',
-                right: '10%',
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: 'clamp(9px, 0.7vw, 11px)',
-                color: '#8FA9A3',
-                opacity: 0.6
-              }}
-              animate={{ opacity: [0.3, 0.7, 0.3] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-            >
-              [SYNC] CRDT state merged
-            </motion.div>
-
-            <motion.div
-              className="absolute"
-              style={{
-                bottom: '20%',
-                left: '5%',
-                fontFamily: 'JetBrains Mono, monospace',
-                fontSize: 'clamp(9px, 0.7vw, 11px)',
-                color: '#8FA9A3',
-                opacity: 0.6
-              }}
-              animate={{ opacity: [0.3, 0.7, 0.3] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'linear', delay: 1.5 }}
-            >
-              [HASH] Stable SHA-256 verified
-            </motion.div>
+          {/* SIM status bar */}
+          <div className="flex items-center w-full justify-between" style={{ maxWidth: 560, fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(9px, 0.75vw, 11px)' }}>
+            <div className="flex items-center gap-2">
+              <motion.div animate={{ opacity:[1,0.3,1] }} transition={{ duration:1, repeat:Infinity }} style={{ width:7, height:7, borderRadius:'50%', backgroundColor:'#00FFA3' }} />
+              <span style={{ color:'#00FFA3', letterSpacing:'0.08em' }}>SIM RUNNING</span>
+            </div>
+            <span style={{ color:'#4A7A70' }}>SEED: 0xDEADBEEF</span>
+            <span style={{ color:'#4A7A70' }}>TICK: {String(tick).padStart(4,'0')}</span>
           </div>
 
-          {/* Supporting Tagline */}
-          <div className="mt-12 text-center" style={{ maxWidth: '500px' }}>
-            <h2 className="mb-4" style={{ 
+          {/* SVG Diagram */}
+          <div className="relative w-full" style={{ maxWidth: 560, aspectRatio: '560/520' }}>
+            <svg width="100%" height="100%" viewBox="0 0 560 520" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                {/* Glow filter */}
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+                  <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                <filter id="glow-strong">
+                  <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                  <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                {/* Packet paths (hidden) */}
+                {packetPaths.map((p, i) => (
+                  <path key={i} id={`pp${i}`} d={p.d} fill="none" />
+                ))}
+              </defs>
+
+              {/* Background grid dots */}
+              {Array.from({ length: 7 }).map((_, xi) =>
+                Array.from({ length: 7 }).map((_, yi) => (
+                  <circle key={`${xi}-${yi}`} cx={40 + xi * 80} cy={30 + yi * 70} r="1"
+                    fill="rgba(0,255,170,0.12)" />
+                ))
+              )}
+
+              {/* Edges */}
+              {edges.map((e, i) => (
+                <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                  stroke="rgba(0,255,170,0.22)" strokeWidth="1.5"
+                  strokeDasharray="6 4" />
+              ))}
+              {/* Edge animated dash */}
+              {edges.map((e, i) => (
+                <line key={`a${i}`} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                  stroke="rgba(0,255,170,0.5)" strokeWidth="1.5"
+                  strokeDasharray="6 4">
+                  <animate attributeName="stroke-dashoffset" from="20" to="0" dur="1.2s" repeatCount="indefinite" />
+                </line>
+              ))}
+
+              {/* Data packets */}
+              {packetPaths.map((p, i) => (
+                <circle key={i} r="4" fill={p.color} filter="url(#glow)">
+                  <animateMotion dur={p.dur} begin={p.delay} repeatCount="indefinite">
+                    <mpath href={`#pp${i}`} />
+                  </animateMotion>
+                  <animate attributeName="opacity" values="0;1;1;0" dur={p.dur} begin={p.delay} repeatCount="indefinite" />
+                </circle>
+              ))}
+
+              {/* Nodes */}
+              {nodes.map(n => (
+                <g key={n.id}>
+                  {/* Outer pulse ring */}
+                  {n.active && (
+                    <circle cx={n.x} cy={n.y} r="28" fill="none" stroke="#00FFA3" strokeWidth="0.8" opacity="0.3">
+                      <animate attributeName="r" values="22;34;22" dur="2.6s" repeatCount="indefinite" />
+                      <animate attributeName="opacity" values="0.3;0;0.3" dur="2.6s" repeatCount="indefinite" />
+                    </circle>
+                  )}
+                  {/* Node box */}
+                  <rect x={n.x - 42} y={n.y - 22} width="84" height="44"
+                    fill="#040F0E"
+                    stroke={n.active ? '#00FFA3' : 'rgba(0,255,170,0.2)'}
+                    strokeWidth={n.active ? '1.5' : '1'}
+                    filter={n.active ? 'url(#glow)' : undefined}
+                  />
+                  {/* Status dot */}
+                  <circle cx={n.x + 34} cy={n.y - 14} r="3.5"
+                    fill={n.active ? '#00FFA3' : '#FF4444'}>
+                    {n.active && <animate attributeName="opacity" values="1;0.4;1" dur="1.8s" repeatCount="indefinite" />}
+                  </circle>
+                  {/* Label */}
+                  <text x={n.x} y={n.y + 5} textAnchor="middle"
+                    fill={n.active ? '#E6F1EF' : '#4A7A70'}
+                    fontSize="11" fontFamily="JetBrains Mono, monospace">
+                    {n.label}
+                  </text>
+                </g>
+              ))}
+
+              {/* Edge RPS labels */}
+              <text x="310" y="83"  fill="#26595A" fontSize="9" fontFamily="JetBrains Mono, monospace">{rps.toLocaleString()} rps</text>
+              <text x="310" y="164" fill="#26595A" fontSize="9" fontFamily="JetBrains Mono, monospace">p50: {p50}ms</text>
+            </svg>
+          </div>
+
+          {/* Live terminal log */}
+          <div className="w-full" style={{
+            maxWidth: 560,
+            backgroundColor: '#020D0B',
+            border: '1px solid rgba(0,255,170,0.15)',
+            borderRadius: '2px',
+            padding: 'clamp(10px, 1vw, 14px)',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 'clamp(8px, 0.72vw, 10px)',
+            lineHeight: 1.7,
+            minHeight: '90px',
+            overflow: 'hidden',
+          }}>
+            <div style={{ color:'#4A7A70', marginBottom:4, letterSpacing:'0.06em' }}>▸ SIMULATION LOG</div>
+            {logLines.map((l, i) => (
+              <motion.div key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                style={{ color: l.t === 'ok' ? '#00FFA3' : l.t === 'warn' ? '#F59E0B' : l.t === 'error' ? '#EF4444' : '#8FA9A3' }}>
+                {l.msg}
+              </motion.div>
+            ))}
+            <motion.span animate={{ opacity:[1,0,1] }} transition={{ duration:0.9, repeat:Infinity }}
+              style={{ color:'#00FFA3' }}>█</motion.span>
+          </div>
+
+          {/* Tagline */}
+          <div className="text-center" style={{ maxWidth: 500 }}>
+            <h2 className="mb-2" style={{
               color: '#E6F1EF',
-              fontSize: 'clamp(28px, 2.2vw, 42px)',
+              fontSize: 'clamp(22px, 1.8vw, 34px)',
               fontWeight: 600,
               lineHeight: 1.2
             }}>
               Your Architecture. Deterministic.
             </h2>
-            <p style={{ 
+            <p style={{
               color: '#8FA9A3',
-              fontSize: 'clamp(14px, 1.1vw, 18px)',
+              fontSize: 'clamp(12px, 0.95vw, 16px)',
               lineHeight: 1.6
             }}>
               Sign in to save simulations, run chaos tests, and generate reproducible post-mortem reports.
