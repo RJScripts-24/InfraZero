@@ -326,11 +326,13 @@ export default function WorkspacePage() {
 
             <button
               onClick={handleDeployTest}
-              className="flex items-center gap-2 px-5 py-2 transition-all"
-              style={{ backgroundColor: '#00FFA3', color: '#020908', borderRadius: '2px', fontSize: '13px', fontWeight: 600 }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#00D98C')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#00FFA3')}
+              className="flex items-center gap-2 px-5 py-2 transition-all iz-btn-green"
+              style={{ color: '#020908', borderRadius: '2px', fontSize: '13px', fontWeight: 600 }}
             >
+              <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
               DEPLOY &amp; TEST
               <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.8 }}>SIM</span>
             </button>
@@ -405,30 +407,20 @@ export default function WorkspacePage() {
                   <button
                     onClick={handleGenerate}
                     disabled={isGenerating}
-                    className="w-full flex items-center justify-center gap-2 py-3 transition-all"
+                    className="w-full flex items-center justify-center gap-2 py-3 transition-all iz-btn-green"
                     style={{
-                      backgroundColor: '#00FFA3',
                       color: '#020908',
                       borderRadius: '3px',
                       fontSize: '13px',
                       fontWeight: 600,
                       opacity: isGenerating ? 0.6 : 1,
-                      boxShadow: '0 2px 12px rgba(0,255,163,0.22)',
                       letterSpacing: '0.03em',
                     }}
-                    onMouseEnter={(e) => {
-                      if (!isGenerating) {
-                        e.currentTarget.style.backgroundColor = '#00E895';
-                        e.currentTarget.style.boxShadow = '0 3px 18px rgba(0,255,163,0.35)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isGenerating) {
-                        e.currentTarget.style.backgroundColor = '#00FFA3';
-                        e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,255,163,0.22)';
-                      }
-                    }}
                   >
+                    <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
                     <Sparkles style={{ width: '16px', height: '16px' }} />
                     {isGenerating ? 'GENERATING...' : 'GENERATE ARCHITECTURE'}
                   </button>
@@ -682,17 +674,18 @@ export default function WorkspacePage() {
               >
                 <button
                   onClick={() => setIsReportOpen(true)}
-                  className="px-5 py-3 flex items-center gap-2 transition-all"
+                  className="px-5 py-3 flex items-center gap-2 transition-all iz-btn-green"
                   style={{
-                    backgroundColor: '#00FFA3',
                     color: '#020908',
                     borderRadius: '2px',
                     fontSize: '13px',
                     fontWeight: 600,
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#00D98C')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#00FFA3')}
                 >
+                  <span style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation: 'izAnimateTop 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
+                  <span style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '2px', background: 'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation: 'izAnimateRight 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
+                  <span style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation: 'izAnimateBottom 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
+                  <span style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '2px', background: 'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation: 'izAnimateLeft 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
                   VIEW REPORT
                   <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.8 }}>
                     ANALYSIS

@@ -588,17 +588,18 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
 
                     <button
                       onClick={handleDownloadPDF}
-                      className="flex items-center gap-2 px-5 py-3 transition-all"
+                      className="flex items-center gap-2 px-5 py-3 transition-all iz-btn-green"
                       style={{
-                        backgroundColor: '#00FFA3',
                         color: '#020908',
                         borderRadius: '2px',
                         fontSize: '13px',
                         fontWeight: 600,
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#00D98C')}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#00FFA3')}
                     >
+                      <span style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation: 'izAnimateTop 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
+                      <span style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '2px', background: 'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation: 'izAnimateRight 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
+                      <span style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation: 'izAnimateBottom 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
+                      <span style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '2px', background: 'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation: 'izAnimateLeft 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
                       <Download size={16} />
                       DOWNLOAD PDF
                       <span
