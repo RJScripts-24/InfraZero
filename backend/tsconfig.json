@@ -1,0 +1,26 @@
+// backend/tsconfig.json
+{
+  "compilerOptions": {
+    /* Base Options */
+    "target": "ES2022",           // Modern JS features supported by Node.js 18+
+    "module": "CommonJS",         // Standard module system for Node/Express
+    "moduleResolution": "node",   // Tells TypeScript how to find standard npm packages
+    "esModuleInterop": true,      // Fixes import issues with CommonJS packages (like Express)
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,         // Skips type checking in node_modules to massively speed up compilation
+    "resolveJsonModule": true,    // Allows you to import .json files directly if needed
+
+    /* Directory Structure */
+    "rootDir": "./src",           // Where your raw TypeScript files live
+    "outDir": "./dist",           // Where the compiled JavaScript will be dumped for production
+
+    /* Strictness */
+    "strict": true,               // Enables strict null checks and type safety
+    "noImplicitAny": true,        // Prevents you from accidentally leaving variables untyped
+    "strictNullChecks": true
+  },
+  
+  /* Tell TypeScript which files to compile and which to ignore */
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+}

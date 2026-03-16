@@ -1,0 +1,37 @@
+{
+    "name": "infrazero-backend",
+    "version": "1.0.0",
+    "description": "InfraZero Backend — AI-powered distributed system architecture generator with real-time collaboration",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "npx ts-node src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "lint": "eslint src/**/*.ts",
+        "lint:fix": "eslint src/**/*.ts --fix"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.45.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.21.0",
+        "express-rate-limit": "^7.4.1",
+        "groq-sdk": "^0.7.0",
+        "helmet": "^8.0.0",
+        "ws": "^8.18.0"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.17",
+        "@types/express": "^5.0.0",
+        "@types/node": "^22.7.0",
+        "@types/ws": "^8.5.12",
+        "@typescript-eslint/eslint-plugin": "^8.8.0",
+        "@typescript-eslint/parser": "^8.8.0",
+        "eslint": "^9.12.0",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.6.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

@@ -1,0 +1,10 @@
+# simulation-engine/.cargo/config.toml
+
+[target.wasm32-unknown-unknown]
+# These flags are critical for WASM optimization.
+# They instruct the Rust compiler to aggressively optimize for speed and shrink the binary size.
+rustflags = [
+    "-C", "lto=true",        # Enable Link-Time Optimization (LTO) to prune unused code
+    "-C", "opt-level=3",     # Maximum optimization for runtime performance
+    "-C", "codegen-units=1"  # Forces LLVM to analyze the whole program at once for better optimization
+]

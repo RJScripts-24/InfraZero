@@ -1,11 +1,7 @@
 // backend/src/middlewares/requireAuth.ts
 import { Request, Response, NextFunction } from 'express';
-import { createClient } from '@supabase/supabase-js';
-import { env } from '../config/env';
+import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
-
-// Initialize the Supabase client to verify tokens
-const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
 /**
  * Authentication Middleware
@@ -53,9 +49,7 @@ export const requireAuth = async (
     } catch (error) {
         logger.error(`[Auth Middleware Error] ${error instanceof Error ? error.message : String(error)}`);
 
-        res.status(500).json({
-            success: false,
-            error: 'Internal server error during authentication.'
-        });
+        // Forward to the global errorHandler middleware for consistent error responses
+        next(error);
     }
 };

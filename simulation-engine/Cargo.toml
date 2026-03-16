@@ -1,0 +1,31 @@
+# simulation-engine/Cargo.toml
+
+[package]
+name = "infrazero-simulation-engine"
+version = "1.0.0"
+edition = "2021"
+description = "Deterministic WebAssembly simulation engine for InfraZero"
+
+# This tells Rust to compile this crate into a dynamic library that 
+# WebAssembly and JavaScript can interface with.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# The bridge between Rust and JavaScript
+wasm-bindgen = "0.2.87"
+
+# Serialization frameworks for safely passing JSON graphs to Rust
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+serde_json = "1.0"
+
+# Deterministic utilities for the physics engine
+rand = "0.8.5"
+sha2 = "0.10.8"
+
+# This block tells the wasm-pack build tool to run `wasm-opt -O3`.
+# It performs a final, extreme optimization pass over the compiled WASM 
+# to ensure it loads instantly on your React Flow frontend.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3"]

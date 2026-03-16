@@ -15,10 +15,16 @@ export const handleAuthWebhook = async (
     next: NextFunction
 ): Promise<void> => {
     try {
+        // The route uses express.raw(), so req.body arrives as a Buffer.
+        // We must parse it into a JSON object before accessing properties.
+        const body = Buffer.isBuffer(req.body)
+            ? JSON.parse(req.body.toString('utf8'))
+            : req.body;
+
         // The exact payload structure depends on if you use Clerk or Supabase Auth.
         // This handles a standard webhook event envelope.
-        const eventType = req.body.type; // e.g., 'user.created', 'user.updated', 'user.deleted'
-        const eventData = req.body.data;
+        const eventType = body.type; // e.g., 'user.created', 'user.updated', 'user.deleted'
+        const eventData = body.data;
 
         if (!eventType || !eventData) {
             res.status(400).json({ success: false, error: 'Malformed webhook payload.' });
