@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Download, ArrowLeft } from 'lucide-react';
+import { X, Download, ArrowLeft, Check, Zap, AlertTriangle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface ReportViewProps {
@@ -31,24 +31,18 @@ const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0];
     return (
-      <div
-        style={{
-          backgroundColor: '#020908',
-          border: '1px solid rgba(0,255,170,0.3)',
-          borderRadius: '2px',
-          padding: '8px 12px',
-        }}
-      >
-        <p style={{ color: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', marginBottom: '4px' }}>
+      <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl p-4 shadow-2xl">
+        <p className="text-zinc-500 text-[10px] font-mono font-bold uppercase tracking-widest mb-2">
           Time: {data.payload.time}s
         </p>
-        <p style={{ color: data.value > 800 ? '#FF3B3B' : '#00FFA3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
+        <p className={`font-mono text-sm font-bold ${data.value > 800 ? 'text-red-400' : 'text-blue-400'}`}>
           Latency: {data.value}ms
         </p>
         {data.value > 800 && (
-          <p style={{ color: '#FF3B3B', fontSize: '10px', fontFamily: 'JetBrains Mono, monospace', marginTop: '4px' }}>
-            Failure threshold exceeded
-          </p>
+          <div className="mt-2 flex items-center gap-1.5 text-red-500/80 text-[10px] font-bold uppercase">
+             <AlertTriangle size={10} />
+             Critical Threshold
+          </div>
         )}
       </div>
     );
@@ -58,567 +52,241 @@ const CustomTooltip = ({ active, payload }: any) => {
 
 export function ReportView({ isOpen, onClose, projectName, reportData }: ReportViewProps) {
   const handleDownloadPDF = () => {
-    // Mock PDF download
     console.log('Downloading PDF report...');
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-[100] overflow-y-auto">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.3, ease: 'linear' }}
-            className="fixed inset-0 z-50"
-            style={{ backgroundColor: 'rgba(2, 9, 8, 0.95)' }}
+            transition={{ duration: 0.4 }}
+            className="fixed inset-0 bg-black backdrop-blur-2xl"
           >
-            {/* Grid overlay */}
-            <div
-              className="fixed inset-0 pointer-events-none"
-              style={{
-                backgroundImage:
-                  'repeating-linear-gradient(to right, rgba(0,255,170,0.06) 0px, rgba(0,255,170,0.06) 1px, transparent 1px, transparent 80px)',
-                backgroundSize: '80px 100%',
-              }}
-            />
+             {/* Background Atmosphere */}
+             <div className="absolute inset-0 z-0 pointer-events-none">
+                <img src="/night-hero.png" alt="Atmosphere" className="absolute inset-0 object-cover w-full h-full opacity-40 mix-blend-screen" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
+             </div>
 
-            {/* Scrollable Content */}
-            <div className="h-full overflow-y-auto">
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 12 }}
-                transition={{ duration: 0.4, ease: 'linear' }}
-                className="relative"
-                style={{
-                  maxWidth: '960px',
-                  margin: '0 auto',
-                  padding: '80px 40px',
-                }}
-              >
-                {/* Close Button */}
-                <button
-                  onClick={onClose}
-                  className="absolute top-8 right-8 p-2 transition-colors"
-                  style={{ color: '#8FA9A3' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#00FFA3')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = '#8FA9A3')}
-                >
-                  <X size={24} />
-                </button>
+             {/* Grid Overlay */}
+             <div className="absolute inset-0 pointer-events-none opacity-20" style={{
+                backgroundImage: 'repeating-linear-gradient(to right, rgba(59,130,246,0.1) 0px, rgba(59,130,246,0.1) 1px, transparent 1px, transparent 80px), repeating-linear-gradient(to bottom, rgba(59,130,246,0.1) 0px, rgba(59,130,246,0.1) 1px, transparent 1px, transparent 80px)',
+                backgroundSize: '80px 80px'
+             }} />
+          </motion.div>
 
-                {/* Header */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.1 }}
-                  className="mb-8"
-                >
-                  <h1
-                    style={{
-                      color: '#E6F1EF',
-                      fontSize: '32px',
-                      fontWeight: 700,
-                      marginBottom: '16px',
-                    }}
-                  >
-                    Simulation Report: {projectName}
-                  </h1>
-                  <div
-                    style={{
-                      color: '#8FA9A3',
-                      fontSize: '12px',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      lineHeight: '1.8',
-                    }}
-                  >
-                    <div>SIMULATION ID: {reportData.simulationId}</div>
-                    <div>UNIVERSE SEED: {reportData.universeSeed}</div>
-                    <div>STABLE HASH: {reportData.stableHash}</div>
-                  </div>
-                  <div
-                    className="mt-6"
-                    style={{
-                      height: '1px',
-                      backgroundColor: 'rgba(0,255,170,0.2)',
-                    }}
-                  />
-                </motion.div>
+          {/* Scrollable Container */}
+          <div className="relative min-h-screen flex flex-col items-center py-20 px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 30 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              className="w-full max-w-4xl"
+            >
+              {/* Top Navigation */}
+              <div className="flex items-center justify-between mb-12">
+                 <button
+                   onClick={onClose}
+                   className="group flex items-center gap-2 text-zinc-500 hover:text-white transition-colors"
+                 >
+                    <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+                    <span className="text-sm font-bold uppercase tracking-wider">Back to Canvas</span>
+                 </button>
 
-                {/* Scorecard */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.2 }}
-                  className="mb-12 border p-8"
-                  style={{
-                    backgroundColor: '#040F0E',
-                    borderColor: 'rgba(0,255,170,0.25)',
-                    borderRadius: '4px',
-                  }}
-                >
-                  <div className="flex items-start justify-between">
-                    {/* Left - Grade */}
-                    <div>
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.5, ease: 'linear', delay: 0.4 }}
-                        style={{
-                          color: reportData.gradeColor,
-                          fontSize: '96px',
-                          fontFamily: 'JetBrains Mono, monospace',
-                          fontWeight: 700,
-                          lineHeight: 1,
-                          marginBottom: '8px',
-                        }}
-                      >
-                        {reportData.grade}
-                      </motion.div>
-                      <div
-                        style={{
-                          color: '#8FA9A3',
-                          fontSize: '11px',
-                          fontFamily: 'JetBrains Mono, monospace',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.1em',
-                        }}
-                      >
-                        ARCHITECTURE GRADE
-                      </div>
-                    </div>
-
-                    {/* Right - Status */}
-                    <div style={{ textAlign: 'right' }}>
-                      <div
-                        style={{
-                          color: reportData.statusColor,
-                          fontSize: '18px',
-                          fontWeight: 700,
-                          marginBottom: '16px',
-                        }}
-                      >
-                        {reportData.status}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: 'JetBrains Mono, monospace',
-                          fontSize: '13px',
-                          lineHeight: '1.8',
-                        }}
-                      >
-                        <div>
-                          <span style={{ color: '#8FA9A3' }}>Total Requests: </span>
-                          <span style={{ color: '#00FFA3' }}>{reportData.totalRequests.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span style={{ color: '#8FA9A3' }}>Failed Requests: </span>
-                          <span style={{ color: '#FF3B3B' }}>{reportData.failedRequests.toLocaleString()}</span>
-                        </div>
-                        <div>
-                          <span style={{ color: '#8FA9A3' }}>Peak Latency: </span>
-                          <span style={{ color: '#00FFA3' }}>{reportData.peakLatency}ms</span>
-                        </div>
-                        <div>
-                          <span style={{ color: '#8FA9A3' }}>System Collapse Time: </span>
-                          <span style={{ color: '#00FFA3' }}>{reportData.collapseTime}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                {/* Root Cause Analysis */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.3 }}
-                  className="mb-12"
-                >
-                  <div
-                    className="mb-4"
-                    style={{
-                      color: '#00FFA3',
-                      fontSize: '13px',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      fontWeight: 600,
-                    }}
-                  >
-                    ROOT CAUSE ANALYSIS
-                  </div>
-                  <div
-                    className="mb-4"
-                    style={{
-                      height: '1px',
-                      backgroundColor: 'rgba(0,255,170,0.2)',
-                    }}
-                  />
-                  <p
-                    style={{
-                      color: '#E6F1EF',
-                      fontSize: '15px',
-                      lineHeight: '1.8',
-                      marginBottom: '24px',
-                    }}
-                    dangerouslySetInnerHTML={{
-                      __html: reportData.rootCause.summary.replace(
-                        /(Single Point of Failure|Load Balancer|cascading downstream failures)/g,
-                        '<span style="color: #00FFA3; font-weight: 600;">$1</span>'
-                      ),
-                    }}
-                  />
-                  <div
-                    style={{
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '13px',
-                      lineHeight: '1.8',
-                    }}
-                  >
-                    {reportData.rootCause.details.map((detail, i) => (
-                      <div key={i} className="flex items-start gap-3 mb-2">
-                        <span style={{ color: '#00FFA3' }}>•</span>
-                        <div>
-                          <span style={{ color: '#8FA9A3' }}>{detail.label}: </span>
-                          <span style={{ color: '#00FFA3' }}>{detail.value}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-
-                {/* Latency Graph */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.4 }}
-                  className="mb-12"
-                >
-                  <div
-                    className="mb-4"
-                    style={{
-                      color: '#00FFA3',
-                      fontSize: '13px',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      fontWeight: 600,
-                    }}
-                  >
-                    LATENCY & TRAFFIC ANALYSIS
-                  </div>
-                  <div
-                    className="mb-4"
-                    style={{
-                      height: '1px',
-                      backgroundColor: 'rgba(0,255,170,0.2)',
-                    }}
-                  />
-                  <div
-                    className="border p-6"
-                    style={{
-                      backgroundColor: '#040F0E',
-                      borderColor: 'rgba(0,255,170,0.2)',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={reportData.latencyData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,255,170,0.08)" />
-                        <XAxis
-                          dataKey="time"
-                          stroke="#8FA9A3"
-                          style={{
-                            fontSize: '11px',
-                            fontFamily: 'JetBrains Mono, monospace',
-                          }}
-                          label={{
-                            value: 'Time (seconds)',
-                            position: 'insideBottom',
-                            offset: -5,
-                            style: { fill: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' },
-                          }}
-                        />
-                        <YAxis
-                          stroke="#8FA9A3"
-                          style={{
-                            fontSize: '11px',
-                            fontFamily: 'JetBrains Mono, monospace',
-                          }}
-                          label={{
-                            value: 'Latency (ms)',
-                            angle: -90,
-                            position: 'insideLeft',
-                            style: { fill: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' },
-                          }}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Line
-                          type="monotone"
-                          dataKey="latency"
-                          stroke="#00FFA3"
-                          strokeWidth={2}
-                          dot={(props: any) => {
-                            const { cx, cy, payload, key } = props;
-                            if (payload.latency > 800) {
-                              return (
-                                <circle
-                                  key={key}
-                                  cx={cx}
-                                  cy={cy}
-                                  r={5}
-                                  fill="#FF3B3B"
-                                  stroke="#FF3B3B"
-                                  strokeWidth={2}
-                                />
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                    <p
-                      className="mt-4"
-                      style={{
-                        color: '#8FA9A3',
-                        fontSize: '12px',
-                        fontFamily: 'JetBrains Mono, monospace',
-                        fontStyle: 'italic',
-                      }}
-                    >
-                      Latency spike correlates with load balancer saturation.
-                    </p>
-                  </div>
-                </motion.div>
-
-                {/* Failure Cascade Visual */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.5 }}
-                  className="mb-12"
-                >
-                  <div
-                    className="border p-6"
-                    style={{
-                      backgroundColor: '#040F0E',
-                      borderColor: 'rgba(0,255,170,0.2)',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    <div className="flex items-center justify-center gap-8">
-                      {/* Load Balancer - Failed */}
-                      <div className="text-center">
-                        <div
-                          className="border-2 px-6 py-4 mb-2"
-                          style={{
-                            borderColor: '#FF3B3B',
-                            backgroundColor: 'rgba(255,59,59,0.1)',
-                            borderRadius: '2px',
-                          }}
-                        >
-                          <div
-                            style={{
-                              color: '#FF3B3B',
-                              fontSize: '13px',
-                              fontFamily: 'JetBrains Mono, monospace',
-                              fontWeight: 600,
-                            }}
-                          >
-                            Load Balancer
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            color: '#FF3B3B',
-                            fontSize: '10px',
-                            fontFamily: 'JetBrains Mono, monospace',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          Failure Origin
-                        </div>
-                      </div>
-
-                      {/* Arrow */}
-                      <div style={{ color: '#FF3B3B', fontSize: '24px' }}>→</div>
-
-                      {/* API Services - Degraded */}
-                      <div className="text-center">
-                        <div
-                          className="border px-6 py-4"
-                          style={{
-                            borderColor: 'rgba(0,255,170,0.3)',
-                            backgroundColor: '#020908',
-                            borderRadius: '2px',
-                          }}
-                        >
-                          <div
-                            style={{
-                              color: '#8FA9A3',
-                              fontSize: '13px',
-                              fontFamily: 'JetBrains Mono, monospace',
-                            }}
-                          >
-                            API Services
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Arrow */}
-                      <div style={{ color: '#8FA9A3', fontSize: '24px' }}>→</div>
-
-                      {/* Database - OK */}
-                      <div className="text-center">
-                        <div
-                          className="border px-6 py-4"
-                          style={{
-                            borderColor: 'rgba(0,255,170,0.3)',
-                            backgroundColor: '#020908',
-                            borderRadius: '2px',
-                          }}
-                        >
-                          <div
-                            style={{
-                              color: '#8FA9A3',
-                              fontSize: '13px',
-                              fontFamily: 'JetBrains Mono, monospace',
-                            }}
-                          >
-                            Database
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                {/* Recommendations */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.6 }}
-                  className="mb-12"
-                >
-                  <div
-                    className="mb-4"
-                    style={{
-                      color: '#00FFA3',
-                      fontSize: '13px',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.1em',
-                      fontWeight: 600,
-                    }}
-                  >
-                    RECOMMENDED FIXES
-                  </div>
-                  <div
-                    className="mb-4"
-                    style={{
-                      height: '1px',
-                      backgroundColor: 'rgba(0,255,170,0.2)',
-                    }}
-                  />
-                  <div
-                    style={{
-                      fontSize: '15px',
-                      lineHeight: '1.8',
-                    }}
-                  >
-                    {reportData.recommendations.map((rec, i) => (
-                      <div key={i} className="flex items-start gap-3 mb-3">
-                        <span style={{ color: '#00FFA3', fontSize: '18px' }}>•</span>
-                        <span
-                          style={{ color: '#E6F1EF' }}
-                          dangerouslySetInnerHTML={{
-                            __html: rec.replace(
-                              /(horizontal scaling|circuit breaker|Redis caching|retry backoff)/gi,
-                              '<span style="color: #00FFA3; font-weight: 600;">$1</span>'
-                            ),
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-
-                {/* Footer Actions */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, ease: 'linear', delay: 0.7 }}
-                >
-                  <div
-                    className="mb-6"
-                    style={{
-                      height: '1px',
-                      backgroundColor: 'rgba(0,255,170,0.2)',
-                    }}
-                  />
-                  <div className="flex items-center justify-end gap-4">
-                    <button
-                      onClick={onClose}
-                      className="flex items-center gap-2 border px-5 py-3 transition-all"
-                      style={{
-                        borderColor: 'rgba(0,255,170,0.3)',
-                        color: '#00FFA3',
-                        backgroundColor: 'transparent',
-                        borderRadius: '2px',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = '#00FFA3';
-                        e.currentTarget.style.backgroundColor = '#071512';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      <ArrowLeft size={16} />
-                      BACK TO EDITOR
-                    </button>
-
+                 <div className="flex gap-4">
                     <button
                       onClick={handleDownloadPDF}
-                      className="flex items-center gap-2 px-5 py-3 transition-all iz-btn-green"
-                      style={{
-                        color: '#020908',
-                        borderRadius: '2px',
-                        fontSize: '13px',
-                        fontWeight: 600,
-                      }}
+                      className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-xs hover:bg-white/10 transition-all flex items-center gap-2"
                     >
-                      <span style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation: 'izAnimateTop 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
-                      <span style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '2px', background: 'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation: 'izAnimateRight 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
-                      <span style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation: 'izAnimateBottom 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
-                      <span style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '2px', background: 'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation: 'izAnimateLeft 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
-                      <Download size={16} />
-                      DOWNLOAD PDF
-                      <span
-                        style={{
-                          fontFamily: 'JetBrains Mono, monospace',
-                          fontSize: '10px',
-                          opacity: 0.8,
-                          marginLeft: '4px',
-                        }}
-                      >
-                        EXPORT
-                      </span>
+                       <Download size={14} />
+                       EXPORT PDF
                     </button>
-                  </div>
-                </motion.div>
+                    <button
+                      onClick={onClose}
+                      className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white transition-all"
+                    >
+                       <X size={18} />
+                    </button>
+                 </div>
+              </div>
+
+              {/* Header */}
+              <div className="mb-12">
+                 <div className="flex items-center gap-3 font-mono text-[10px] font-bold tracking-[0.3em] uppercase text-blue-500 mb-4">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
+                    Simulation Report // Deterministic Output
+                 </div>
+                 <h1 className="text-white text-5xl font-bold tracking-tight mb-6">
+                    {projectName}
+                 </h1>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-1">
+                       <span className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Simulation ID</span>
+                       <div className="text-zinc-300 font-mono text-sm">{reportData.simulationId}</div>
+                    </div>
+                    <div className="space-y-1">
+                       <span className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Universe Seed</span>
+                       <div className="text-zinc-300 font-mono text-sm">{reportData.universeSeed}</div>
+                    </div>
+                    <div className="space-y-1">
+                       <span className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Stable Hash</span>
+                       <div className="text-zinc-300 font-mono text-xs truncate">{reportData.stableHash}</div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Main Scorecard (Glassmorphism) */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="mb-10 p-10 rounded-[32px] bg-zinc-900/40 backdrop-blur-3xl border border-white/10 shadow-2xl relative overflow-hidden"
+              >
+                 <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-500/20 to-transparent" />
+                 
+                 <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-12">
+                    {/* Grade Section */}
+                    <div className="text-center md:text-left">
+                       <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-[0.2em] mb-2">Architecture Grade</div>
+                       <motion.div
+                         initial={{ opacity: 0, scale: 0.5 }}
+                         animate={{ opacity: 1, scale: 1 }}
+                         transition={{ type: 'spring', damping: 10, delay: 0.4 }}
+                         className="text-white font-bold leading-none"
+                         style={{ fontSize: '120px', textShadow: '0 0 40px rgba(59,130,246,0.3)' }}
+                       >
+                          {reportData.grade}
+                       </motion.div>
+                       <div className={`mt-4 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest inline-block ${reportData.status.includes('PASS') ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
+                          {reportData.status}
+                       </div>
+                    </div>
+
+                    {/* Stats Grid */}
+                    <div className="flex-1 grid grid-cols-2 gap-8 md:pt-6">
+                       {[
+                         { label: 'Total Requests', value: reportData.totalRequests.toLocaleString(), icon: <Zap size={14} className="text-blue-500" /> },
+                         { label: 'Peak Latency', value: `${reportData.peakLatency}ms`, icon: <Zap size={14} className="text-blue-500" /> },
+                         { label: 'Failed Traffic', value: `${reportData.failedRequests.toLocaleString()}`, icon: <AlertTriangle size={14} className="text-red-500" /> },
+                         { label: 'Collapse Point', value: reportData.collapseTime, icon: <AlertTriangle size={14} className="text-red-500" /> },
+                       ].map((stat, i) => (
+                         <div key={i} className="space-y-1">
+                            <div className="flex items-center gap-2 text-zinc-500 text-[10px] uppercase font-bold tracking-widest">
+                               {stat.icon}
+                               {stat.label}
+                            </div>
+                            <div className="text-white text-2xl font-bold font-mono tracking-tight">{stat.value}</div>
+                         </div>
+                       ))}
+                    </div>
+                 </div>
               </motion.div>
-            </div>
-          </motion.div>
-        </>
+
+              {/* Analysis & Chart Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
+                 
+                 {/* Left: Chart (Big) */}
+                 <div className="lg:col-span-3 space-y-6">
+                    <div className="p-8 rounded-[32px] bg-zinc-900/40 backdrop-blur-3xl border border-white/5">
+                       <h3 className="text-white font-bold text-lg mb-8">Performance Spectrum</h3>
+                       <div className="h-[280px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={reportData.latencyData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" vertical={false} />
+                              <XAxis 
+                                dataKey="time" 
+                                stroke="#52525B" 
+                                style={{ fontSize: '10px', fontBold: true }}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ dy: 10 }}
+                              />
+                              <YAxis 
+                                stroke="#52525B" 
+                                style={{ fontSize: '10px' }}
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ dx: -10 }}
+                              />
+                              <Tooltip content={<CustomTooltip />} />
+                              <Line
+                                type="monotone"
+                                dataKey="latency"
+                                stroke="#3B82F6"
+                                strokeWidth={3}
+                                dot={(props: any) => {
+                                  if (props.payload.latency > 800) {
+                                    return <circle key={props.key} cx={props.cx} cy={props.cy} r={4} fill="#EF4444" stroke="none" />;
+                                  }
+                                  return null;
+                                }}
+                                animationDuration={1500}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                       </div>
+                       <p className="mt-6 text-zinc-500 text-xs italic font-medium">
+                          Deterministic projection of throughput under high-concurrency stress.
+                       </p>
+                    </div>
+
+                    {/* Recommendations */}
+                    <div className="p-8 rounded-[32px] bg-blue-500/5 border border-blue-500/10">
+                       <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-2">
+                          <Check size={20} className="text-blue-500" />
+                          Recommended Mitigations
+                       </h3>
+                       <div className="space-y-4">
+                          {reportData.recommendations.map((rec, i) => (
+                            <div key={i} className="flex gap-4 group">
+                               <div className="h-6 w-6 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 text-[10px] font-bold group-hover:bg-blue-500 group-hover:text-white transition-all">
+                                  {i+1}
+                               </div>
+                               <p className="text-zinc-300 text-sm leading-relaxed flex-1">
+                                  {rec}
+                               </p>
+                            </div>
+                          ))}
+                       </div>
+                    </div>
+                 </div>
+
+                 {/* Right: Insights (Small) */}
+                 <div className="lg:col-span-2 space-y-6">
+                    <div className="p-8 rounded-[32px] bg-zinc-900/40 backdrop-blur-3xl border border-white/5 h-full">
+                       <div className="text-red-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-4">Root Cause Analysis</div>
+                       <h3 className="text-white font-bold text-xl mb-6 leading-tight">Critical Saturation Detected</h3>
+                       <p className="text-zinc-400 text-sm leading-relaxed mb-8">
+                          {reportData.rootCause.summary}
+                       </p>
+
+                       <div className="space-y-3">
+                          {reportData.rootCause.details.map((detail, i) => (
+                             <div key={i} className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                                <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">{detail.label}</div>
+                                <div className="text-zinc-200 font-bold text-sm">{detail.value}</div>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Final Visual Disclaimer */}
+              <div className="mt-20 text-center opacity-20 select-none">
+                 <div className="font-mono text-[9px] text-zinc-500 tracking-[0.5em] uppercase font-bold mb-2">InfraZero // Autonomous SRE</div>
+                 <div className="font-mono text-[8px] text-zinc-300 tracking-[0.2em] uppercase">SYSTEM_STATE: REPLICATED // HASH_CONSISTENCY: 100%</div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
       )}
     </AnimatePresence>
   );

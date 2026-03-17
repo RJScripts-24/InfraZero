@@ -1,4 +1,4 @@
-import { Zap, Github, Menu, X, Terminal, Cpu, Database, Network } from 'lucide-react';
+import { Zap, Github, Menu, X, Terminal, Cpu, Database, Network, Twitter, Instagram, Mail, Star, Send } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
@@ -542,118 +542,90 @@ export default function LandingPage() {
         </motion.div>
       </section>
 
-      {/* SECTION 5 — LIBRARY OF DOOM */}
-      <section className="px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#000000', paddingTop: 'clamp(80px, 9vw, 160px)', paddingBottom: 'clamp(80px, 9vw, 160px)' }}>
-        <div className="mx-auto" style={{ maxWidth: '1700px' }}>
-          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} 
-            transition={{ duration: 0.5, ease: 'linear' }} className="border p-12"
-            style={{ backgroundColor: '#0A0A0A', borderColor: '#3B82F6', borderWidth: '1px' }}>
-            
-            <div className="inline-block uppercase tracking-widest mb-8" 
-              style={{ backgroundColor: '#3B82F6', color: '#000000', fontFamily: 'JetBrains Mono, monospace',
-                fontWeight: 600, padding: 'clamp(8px, 0.8vw, 12px) clamp(16px, 1.5vw, 24px)', fontSize: 'clamp(10px, 0.85vw, 13px)' }}>
-              Educational Presets
-            </div>
-            
-            <h3 className="font-bold mb-6" style={{ color: '#FFFFFF', fontSize: 'clamp(40px, 4.5vw, 80px)', lineHeight: 1.1 }}>
-              The Library of Doom
-            </h3>
-            
-            <p className="mb-12" style={{ color: '#A1A1AA', fontSize: 'clamp(16px, 1.35vw, 24px)', lineHeight: 1.6 }}>
-              Pre-configured catastrophic failure scenarios from production systems. Each is fully interactive, reproducible, 
-              and designed to teach you what not to do.
-            </p>
+      {/* FINAL CTA — WEKRAFT STYLE */}
+      <section className="relative z-10 overflow-hidden" 
+        style={{ backgroundColor: '#000000', paddingTop: 'clamp(140px, 15vw, 240px)', paddingBottom: 'clamp(100px, 10vw, 160px)' }}>
+        
+        {/* Background Atmosphere (Matching Hero perfectly) */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <img src="/night-hero.png" alt="Starry Background" className="absolute inset-0 object-cover w-full h-full opacity-100 mix-blend-screen" />
+          
+          {/* Fade transition: pure black at top to blend perfectly, clear in middle, black at bottom edge */}
+          <div className="absolute inset-0" style={{
+            background: 'linear-gradient(to bottom, #000000 0%, transparent 25%, transparent 80%, #000000 100%)'
+          }} />
+        </div>
 
-            {/* Preset Grid */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {[
-                {
-                  number: '01',
-                  title: 'The Thundering Herd',
-                  description: '10,000 users hit the database simultaneously after cache expiration. Watch the system collapse. Learn cache warming strategies.'
-                },
-                {
-                  number: '02',
-                  title: 'The Retry Storm',
-                  description: 'Aggressive retry logic overwhelms a recovering service. System never stabilizes. Understand exponential backoff and jitter.'
-                },
-                {
-                  number: '03',
-                  title: 'The Byzantine General',
-                  description: 'Malicious node sends conflicting messages. Consensus protocol must detect and isolate. Classic distributed systems problem.'
-                },
-                {
-                  number: '04',
-                  title: 'The Split Brain',
-                  description: 'Network partition creates two leaders. Both accept writes. Data diverges. Master the CAP theorem in practice.'
-                }
-              ].map((preset) => (
-                <div key={preset.number} className="border p-6" 
-                  style={{ backgroundColor: '#000000', borderColor: 'rgba(59,130,246,0.2)' }}>
-                  <div className="uppercase tracking-widest mb-3" 
-                    style={{ color: '#3B82F6', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.85vw, 13px)' }}>
-                    Scenario {preset.number}
-                  </div>
-                  <h4 className="font-bold mb-3" style={{ color: '#FFFFFF', fontSize: 'clamp(20px, 1.8vw, 32px)' }}>
-                    {preset.title}
-                  </h4>
-                  <p style={{ color: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace', 
-                    fontSize: 'clamp(12px, 0.95vw, 16px)', lineHeight: 1.6 }}>
-                    {preset.description}
-                  </p>
-                </div>
-              ))}
+        <div className="mx-auto flex flex-col items-center text-center relative z-10 px-6" style={{ maxWidth: '1200px' }}>
+          {/* Centered Logo Branding */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+            className="flex items-center gap-4 mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center shadow-[0_0_30px_rgba(37,99,235,0.4)]">
+              <Zap className="w-9 h-9 text-white" fill="white" />
             </div>
+            <span className="text-4xl font-bold tracking-tight text-white">InfraZero</span>
+          </motion.div>
 
-            <button className="border transition-all uppercase tracking-wider mt-8"
-              style={{ borderColor: 'rgba(59,130,246,0.4)', color: '#3B82F6', backgroundColor: 'transparent',
-                fontFamily: 'JetBrains Mono, monospace', padding: 'clamp(14px, 1.3vw, 20px) clamp(32px, 2.8vw, 48px)', fontSize: 'clamp(12px, 1vw, 15px)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#3B82F6'; e.currentTarget.style.color = '#000000'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#3B82F6'; }}>
-              Browse All Scenarios →
+          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }}
+            className="text-5xl md:text-7xl font-bold tracking-tight text-white mb-10 max-w-4xl leading-[1.1]">
+            The Future of Infrastructure <br/>
+            <span className="text-blue-500">Crafted Together.</span>
+          </motion.h2>
+
+          {/* Waitlist Input Box */}
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }}
+            className="w-full max-w-xl relative flex items-center p-1.5 rounded-2xl border bg-zinc-900/40 backdrop-blur-xl mb-6"
+            style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
+            <input type="email" placeholder="Enter your email..." 
+              className="flex-1 bg-transparent border-none outline-none px-6 text-white placeholder-zinc-500 text-lg" />
+            <button onClick={() => navigate('/auth')} className="iz-btn-blue relative overflow-hidden text-white font-semibold rounded-xl px-10 py-3.5 flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]">
+              <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+              Get Started
+              <Send className="w-4 h-4" />
             </button>
           </motion.div>
+          <p className="text-zinc-500 text-sm tracking-wide">Get Early bird discount. Join Now.</p>
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="border-t px-8 xl:px-12 2xl:px-16 relative z-10" 
-        style={{ backgroundColor: '#000000', borderColor: 'rgba(59,130,246,0.1)', paddingTop: 'clamp(60px, 7vw, 100px)', paddingBottom: 'clamp(60px, 7vw, 100px)' }}>
-        <div className="mx-auto" style={{ maxWidth: '1840px' }}>
-          <div className="grid md:grid-cols-4 gap-12">
-            <div>
-              <div className="mb-4" style={{ color: '#3B82F6', fontSize: 'clamp(24px, 2vw, 32px)' }}>InfraZero</div>
-              <p style={{ color: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(12px, 1vw, 15px)' }}>
-                Control plane for distributed systems.
-              </p>
-            </div>
-            
-            {['Platform', 'Resources', 'Connect'].map((section) => (
-              <div key={section}>
-                <div className="uppercase mb-4 tracking-widest" 
-                  style={{ color: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(10px, 0.85vw, 13px)' }}>
-                  {section}
-                </div>
-                <div className="space-y-2">
-                  {['Features', 'Documentation', 'Examples'].map((link) => (
-                    <div key={link}>
-                      <a href="#" className="transition-colors" style={{ color: '#A1A1AA', fontSize: 'clamp(13px, 1vw, 16px)' }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#3B82F6'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = '#A1A1AA'}>
-                        {link}
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      {/* NEW COMPACT FOOTER — WEKRAFT STYLE */}
+      <footer className="relative z-20 border-t border-white/5 py-12 px-8 xl:px-12 2xl:px-16" style={{ backgroundColor: '#000000' }}>
+        <div className="mx-auto flex flex-col md:flex-row items-center justify-between gap-8" style={{ maxWidth: '1400px' }}>
+          
+          {/* Left: Copyright */}
+          <div className="text-zinc-500 text-sm">
+            © 2026 InfraZero. All rights reserved.
+          </div>
+
+          {/* Center: Socials */}
+          <div className="flex items-center gap-6">
+            {[
+              { icon: <Twitter className="w-5 h-5" />, label: 'X' },
+              { icon: <div className="font-bold text-lg">D</div>, label: 'Discord' },
+              { icon: <Instagram className="w-5 h-5" />, label: 'Instagram' },
+              { icon: <Mail className="w-5 h-5" />, label: 'Email' }
+            ].map((social, i) => (
+              <a key={i} href="#" className="text-zinc-500 hover:text-white transition-colors" title={social.label}>
+                {social.icon}
+              </a>
             ))}
           </div>
-          
-          <div className="mt-16 pt-8 border-t" style={{ borderColor: 'rgba(59,130,246,0.1)', 
-            color: '#A1A1AA', fontFamily: 'JetBrains Mono, monospace', fontSize: 'clamp(11px, 0.9vw, 14px)' }}>
-            © 2026 InfraZero. Infrastructure-grade distributed systems platform.
+
+          {/* Right: GitHub & Support */}
+          <div className="flex items-center gap-4">
+            <a href="#" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors border border-white/10 rounded-lg px-3 py-1.5 text-sm font-medium bg-zinc-900/50">
+              <Star className="w-4 h-4" />
+              <span>Star on GitHub</span>
+            </a>
+            <button className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg px-4 py-2 text-sm font-semibold transition-all flex items-center gap-2">
+              <Zap className="w-4 h-4" fill="currentColor" />
+              Support Project
+            </button>
           </div>
+
         </div>
       </footer>
     </div>

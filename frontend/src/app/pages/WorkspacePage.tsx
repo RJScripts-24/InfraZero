@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Share2,
   ChevronDown,
@@ -10,6 +10,8 @@ import {
   FileImage,
   PanelLeftClose,
   PanelLeftOpen,
+  Terminal,
+  Zap,
 } from 'lucide-react';
 import {
   addEdge,
@@ -37,8 +39,8 @@ const initialNodes: Node[] = [
 const edgeBase = {
   type: 'smoothstep',
   animated: false,
-  style: { stroke: 'rgba(0,255,170,0.48)', strokeWidth: 2.5 },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#00FFA3', width: 16, height: 16 },
+  style: { stroke: 'rgba(59,130,246,0.5)', strokeWidth: 2.5 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
 };
 
 const initialEdges: Edge[] = [
@@ -89,8 +91,8 @@ export default function WorkspacePage() {
           {
             ...params,
             type: 'smoothstep',
-            style: { stroke: 'rgba(0,255,170,0.48)', strokeWidth: 2.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#00FFA3', width: 16, height: 16 },
+            style: { stroke: 'rgba(59,130,246,0.5)', strokeWidth: 2.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
             animated: mode === 'sim',
           },
           eds,
@@ -161,23 +163,22 @@ export default function WorkspacePage() {
     setTerminalExpanded(true);
     setSimulationComplete(false);
     const messages = [
-      '[INFO] Starting Simulation...',
+      '[SYSTEM] Initializing Deterministic Vector...',
       '[INFO] Universe Seed: 783492',
-      '[SYNC] Stable Hash Verified',
-      '[INFO] Running 10,000 requests...',
-      "[WARN] Service 'Auth' latency spike detected",
-      '[INFO] Applying backpressure...',
-      '[INFO] System stabilized',
+      '[SYNC] Brand-Blue Consistency Verified',
+      '[INFO] Deploying 10,000 ephemeral workers...',
+      "[WARN] Gateway latency spike detected at [323ms]",
+      '[INFO] Applying backpressure algorithms...',
+      '[INFO] Topology stabilized at 99.98% uptime',
       '[INFO] Simulation complete.',
-      'ARCHITECTURE GRADE: B-',
-      'ESTIMATED COST INDEX: 0.67',
-      'ROOT CAUSE: Missing Redis cache layer',
+      'GRADE: B+',
+      'COST EFFICIENCY: 0.72',
+      'RECOMMENDATION: Scale horizontal workers',
     ];
     setLogs([]);
     messages.forEach((msg, i) => {
       setTimeout(() => {
         setLogs((p) => [...p, msg]);
-        // Enable report button after last log
         if (i === messages.length - 1) {
           setTimeout(() => setSimulationComplete(true), 500);
         }
@@ -187,7 +188,6 @@ export default function WorkspacePage() {
   };
 
   const handleImportDiagram = (importedNodes: any[], importedEdges: any[]) => {
-    // Add imported nodes to canvas
     const formattedNodes = importedNodes.map((node) => ({
       ...node,
       type: 'custom',
@@ -202,327 +202,208 @@ export default function WorkspacePage() {
     setNodes((nds) => [...nds, ...formattedNodes]);
     setEdges((eds) => [...eds, ...formattedEdges]);
 
-    // Log to terminal
     setTerminalExpanded(true);
     const importLogs = [
-      '[IMPORT] Diagram compiled',
-      '[HASH] Stable SHA-256 verified',
-      '[READY] Simulation parameters initialized',
+      '[IMPORT] Vision API analysis complete',
+      '[HASH] Stable Blue Hash verified',
+      '[READY] Workspace re-synchronized',
     ];
     setLogs(importLogs);
   };
 
   return (
-    <div className="h-screen flex flex-col" style={{ backgroundColor: '#020908', fontFamily: 'Inter, sans-serif' }}>
+    <div className="h-screen flex flex-col relative overflow-hidden" style={{ backgroundColor: '#000000', fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* ── Background Atmosphere ── */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
+        <img src="/night-hero.png" alt="Atmosphere" className="absolute inset-0 object-cover w-full h-full mix-blend-screen" />
+      </div>
+
       {/* Grid overlay */}
       <div
-        className="fixed inset-0 pointer-events-none"
+        className="fixed inset-0 pointer-events-none z-[1]"
         style={{
-          backgroundImage:
-            'repeating-linear-gradient(to right, rgba(0,255,170,0.06) 0px, rgba(0,255,170,0.06) 1px, transparent 1px, transparent 80px)',
-          backgroundSize: '80px 100%',
-          zIndex: 1,
+          backgroundImage: 'repeating-linear-gradient(to right, rgba(59,130,246,0.06) 0px, rgba(59,130,246,0.06) 1px, transparent 1px, transparent 80px), repeating-linear-gradient(to bottom, rgba(59,130,246,0.06) 0px, rgba(59,130,246,0.06) 1px, transparent 1px, transparent 80px)',
+          backgroundSize: '80px 80px',
         }}
       />
 
       {/* ── HEADER ── */}
       <motion.header
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: 'linear' }}
-        className="border-b relative z-10"
-        style={{ height: '64px', backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.15)' }}
+        className="border-b relative z-20 backdrop-blur-md bg-black/40 border-white/5"
+        style={{ height: '70px' }}
       >
-        <div className="h-full px-6 flex items-center justify-between">
-          {/* Left */}
-          <div>
-            {isEditingName ? (
-              <input
-                type="text"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                onBlur={() => setIsEditingName(false)}
-                onKeyDown={(e) => e.key === 'Enter' && setIsEditingName(false)}
-                autoFocus
-                className="border-b outline-none"
-                style={{
-                  backgroundColor: 'transparent',
-                  borderColor: '#00FFA3',
-                  color: '#E6F1EF',
-                  fontSize: '16px',
-                  fontFamily: 'JetBrains Mono, monospace',
-                  fontWeight: 500,
-                  width: '300px',
-                }}
-              />
-            ) : (
-              <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsEditingName(true)}>
-                <span style={{ color: '#E6F1EF', fontSize: '16px', fontWeight: 500 }}>{projectName}</span>
-                <Edit3 style={{ width: '14px', height: '14px', color: '#8FA9A3' }} />
-              </div>
-            )}
-            <div
-              className="mt-1"
-              style={{
-                color: mode === 'sim' ? '#00FFA3' : '#8FA9A3',
-                fontSize: '11px',
-                fontFamily: 'JetBrains Mono, monospace',
-              }}
+        <div className="h-full px-10 flex items-center justify-between">
+          {/* Left: Project Branding */}
+          <div className="flex items-center gap-6">
+            <div 
+              className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.15)]"
+              onClick={() => window.location.href = '/dashboard'}
+              style={{ cursor: 'pointer' }}
             >
-              {mode === 'sim' ? 'SIMULATION RUNNING' : 'Saved locally'}
+               <Zap size={20} className="text-blue-500" />
+            </div>
+            
+            <div>
+              {isEditingName ? (
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  onBlur={() => setIsEditingName(false)}
+                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingName(false)}
+                  autoFocus
+                  className="bg-transparent border-b border-blue-500 outline-none text-white font-bold text-lg tracking-tight w-[280px]"
+                />
+              ) : (
+                <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setIsEditingName(true)}>
+                  <span className="text-white text-lg font-bold tracking-tight">{projectName}</span>
+                  <Edit3 size={14} className="text-zinc-500 group-hover:text-blue-400 transition-colors" />
+                </div>
+              )}
+              <div className="mt-0.5 text-[10px] font-mono font-bold tracking-[0.2em] text-blue-500/60 flex items-center gap-2 uppercase">
+                <div className={`w-1 h-1 rounded-full ${mode === 'sim' ? 'bg-blue-500 animate-pulse' : 'bg-zinc-700'}`} />
+                {mode === 'sim' ? 'Engine Hot_ Replications Running' : 'Synchronized Locally'}
+              </div>
             </div>
           </div>
 
-          {/* Center */}
-          <div
-            className="flex border"
-            style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px' }}
-          >
+          {/* Center: Mode Switch (Glassmorphism) */}
+          <div className="p-1 bg-zinc-900/60 rounded-2xl border border-white/5 flex gap-1 shadow-2xl">
             {(['edit', 'sim'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
-                className="px-6 py-2 transition-all"
-                style={{
-                  backgroundColor: mode === m ? '#00FFA3' : 'transparent',
-                  color: mode === m ? '#020908' : '#8FA9A3',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                }}
+                className={`px-8 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-widest ${
+                  mode === m ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'text-zinc-500 hover:text-white'
+                }`}
               >
-                {m === 'edit' ? 'Edit Mode' : 'Sim Mode'}
+                {m === 'edit' ? 'Architect' : 'Simulator'}
               </button>
             ))}
           </div>
 
-          {/* Right */}
-          <div className="flex items-center gap-3">
-            <div className="flex -space-x-2">
-              {['A', 'B'].map((u, i) => (
-                <div
-                  key={i}
-                  className="relative rounded-full border-2 flex items-center justify-center"
-                  style={{ width: '32px', height: '32px', backgroundColor: '#040F0E', borderColor: '#00FFA3', color: '#00FFA3', fontSize: '12px' }}
-                >
-                  {u}
-                  <div
-                    className="absolute bottom-0 right-0 rounded-full border-2"
-                    style={{ width: '8px', height: '8px', backgroundColor: '#00FFA3', borderColor: '#040F0E' }}
-                  />
-                </div>
-              ))}
-            </div>
-
+          {/* Right: Actions */}
+          <div className="flex items-center gap-4">
             <button
               onClick={handleShareClick}
-              className="flex items-center gap-2 border px-4 py-2 transition-all"
-              style={{ borderColor: 'rgba(0,255,170,0.3)', color: '#00FFA3', backgroundColor: 'transparent', borderRadius: '2px', fontSize: '13px' }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)')}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-xs hover:bg-white/10 transition-all"
             >
-              {linkCopied ? <Check style={{ width: '16px', height: '16px' }} /> : <Share2 style={{ width: '16px', height: '16px' }} />}
-              {linkCopied ? 'COPIED' : 'SHARE'}
+              {linkCopied ? <Check size={14} className="text-blue-400" /> : <Share2 size={14} />}
+              <span className="tracking-widest uppercase">{linkCopied ? 'STABLE' : 'SHARE'}</span>
             </button>
 
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={handleDeployTest}
-              className="flex items-center gap-2 px-5 py-2 transition-all iz-btn-green"
-              style={{ color: '#020908', borderRadius: '2px', fontSize: '13px', fontWeight: 600 }}
+              className="iz-btn-blue relative overflow-hidden py-2.5 px-8 rounded-xl text-white font-bold text-xs shadow-xl transition-all"
             >
-              <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
-              <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-              <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
-              <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-              DEPLOY &amp; TEST
-              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.8 }}>SIM</span>
-            </button>
+              <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+              <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+              DEPLOY & TEST
+            </motion.button>
           </div>
         </div>
       </motion.header>
 
       {/* ── BODY ── */}
       <div className="flex-1 flex overflow-hidden relative z-10">
-        {/* Left sidebar */}
-        <motion.aside
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ 
-            opacity: isSidebarOpen ? 1 : 0,
-            x: isSidebarOpen ? 0 : -10,
-            width: isSidebarOpen ? '300px' : '0px',
-          }}
-          transition={{ duration: 0.3, ease: 'linear' }}
-          className="border-r overflow-hidden"
-          style={{
-            background: 'linear-gradient(180deg, #071816 0%, #040F0E 40%, #030D0C 100%)',
-            borderColor: 'rgba(0,255,170,0.15)',
-            boxShadow: 'inset -1px 0 0 rgba(0,255,170,0.04)',
-          }}
-        >
-          <div className="h-full flex flex-col" style={{ width: '300px' }}>
-            <div className="flex border-b" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
-              {(['ai', 'components'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className="flex-1 py-3 text-center uppercase tracking-wider relative"
-                  style={{ color: activeTab === tab ? '#00FFA3' : '#8FA9A3', fontSize: '11px', fontWeight: 600 }}
-                >
-                  {tab === 'ai' ? 'AI PROMPTER' : 'COMPONENTS'}
-                  {activeTab === tab && (
-                    <div className="absolute bottom-0 left-0 right-0" style={{ height: '2px', backgroundColor: '#00FFA3' }} />
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              {activeTab === 'ai' ? (
-                <div className="space-y-4">
-                  <textarea
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder={'Paste README.md or type:\n"Build a Netflix-like microservices backend"'}
-                    className="w-full border p-3 resize-none outline-none"
-                    rows={8}
-                    style={{
-                      backgroundColor: '#020A09',
-                      borderColor: 'rgba(0,255,170,0.2)',
-                      color: '#DFF0EC',
-                      fontFamily: 'JetBrains Mono, monospace',
-                      fontSize: '12px',
-                      borderRadius: '3px',
-                      boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.35)',
-                      lineHeight: '1.6',
-                      transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = '#00FFA3';
-                      e.currentTarget.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.35), 0 0 0 2px rgba(0,255,170,0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)';
-                      e.currentTarget.style.boxShadow = 'inset 0 2px 6px rgba(0,0,0,0.35)';
-                    }}
-                  />
+        
+        {/* Left Sidebar: AI & Components (Glassmorphism) */}
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <motion.aside
+              initial={{ x: -320, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -320, opacity: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-[320px] border-r border-white/5 bg-zinc-950/40 backdrop-blur-3xl flex flex-col relative z-20"
+            >
+              <div className="flex border-b border-white/5">
+                {(['ai', 'components'] as const).map((tab) => (
                   <button
-                    onClick={handleGenerate}
-                    disabled={isGenerating}
-                    className="w-full flex items-center justify-center gap-2 py-3 transition-all iz-btn-green"
-                    style={{
-                      color: '#020908',
-                      borderRadius: '3px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      opacity: isGenerating ? 0.6 : 1,
-                      letterSpacing: '0.03em',
-                    }}
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`flex-1 py-4 text-[10px] font-bold tracking-[0.2em] uppercase transition-colors relative ${
+                      activeTab === tab ? 'text-blue-500' : 'text-zinc-600 hover:text-zinc-400'
+                    }`}
                   >
-                    <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
-                    <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-                    <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
-                    <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-                    <Sparkles style={{ width: '16px', height: '16px' }} />
-                    {isGenerating ? 'GENERATING...' : 'GENERATE ARCHITECTURE'}
+                    {tab === 'ai' ? 'Vision Prompt' : 'Primitives'}
+                    {activeTab === tab && (
+                      <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
+                    )}
                   </button>
-                  {isGenerating && (
-                    <div style={{ color: '#8FA9A3', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
-                      [AI] Groq Llama 3 generating topology...
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                {activeTab === 'ai' ? (
+                  <div className="space-y-6">
+                    <div className="relative">
+                       <textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder={'Enter technical prompt...\ne.g. "Microservices with distributed cache"'}
+                        className="w-full bg-black/40 border border-white/10 rounded-[20px] p-6 resize-none outline-none text-white text-sm font-medium tracking-tight placeholder:text-zinc-700 focus:border-blue-500/50 transition-all custom-scrollbar"
+                        rows={8}
+                      />
+                      <div className="absolute right-4 bottom-4 text-[9px] font-mono text-zinc-700 tracking-wider font-bold">ALPHA_v0.9</div>
                     </div>
-                  )}
-
-                  {/* Divider */}
-                  <div className="border-t" style={{ borderColor: 'rgba(0,255,170,0.15)', margin: '16px 0' }} />
-
-                  {/* Import Diagram Button */}
-                  <button
-                    onClick={() => setIsImportPopupOpen(true)}
-                    className="w-full flex items-center justify-center gap-2 py-3 border transition-all"
-                    style={{
-                      backgroundColor: 'transparent',
-                      borderColor: 'rgba(0,255,170,0.28)',
-                      color: '#00FFA3',
-                      borderRadius: '3px',
-                      fontSize: '13px',
-                      fontWeight: 600,
-                      letterSpacing: '0.03em',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.8)';
-                      e.currentTarget.style.backgroundColor = 'rgba(0,255,170,0.06)';
-                      e.currentTarget.style.boxShadow = '0 0 10px rgba(0,255,170,0.08)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'rgba(0,255,170,0.28)';
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                  >
-                    <FileImage style={{ width: '16px', height: '16px' }} />
-                    IMPORT DIAGRAM
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {componentList.map((component) => (
-                    <div
-                      key={component.id}
-                      className="border cursor-move transition-all"
-                      style={{
-                        backgroundColor: '#020A09',
-                        borderColor: 'rgba(0,255,170,0.18)',
-                        borderRadius: '3px',
-                        padding: '10px 12px 10px 14px',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'rgba(0,255,170,0.55)';
-                        e.currentTarget.style.backgroundColor = '#061410';
-                        e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.4), inset 2px 0 0 rgba(0,255,170,0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'rgba(0,255,170,0.18)';
-                        e.currentTarget.style.backgroundColor = '#020A09';
-                        e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.3)';
-                      }}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, component)}
+                    
+                    <motion.button
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleGenerate}
+                      disabled={isGenerating}
+                      className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-600 transition-all"
                     >
-                      <div style={{ color: '#DFF0EC', fontSize: '13px', fontFamily: 'JetBrains Mono, monospace', marginBottom: '3px', fontWeight: 500 }}>
-                        {component.name}
-                      </div>
-                      <div style={{ color: '#5A8880', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
-                        {component.type}
-                      </div>
+                      <Sparkles size={18} className={isGenerating ? 'animate-spin' : ''} />
+                      {isGenerating ? 'COMPUTING...' : 'GENERATE TOPOLOGY'}
+                    </motion.button>
+                    
+                    <div className="pt-6 border-t border-white/5">
+                      <button
+                        onClick={() => setIsImportPopupOpen(true)}
+                        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl border border-white/5 bg-white/5 text-zinc-400 font-bold text-sm hover:text-white hover:bg-white/10 transition-all"
+                      >
+                        <FileImage size={18} />
+                        IMPORT VISION DATA
+                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.aside>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {componentList.map((component) => (
+                      <motion.div
+                        key={component.id}
+                        whileHover={{ x: 4, scale: 1.02 }}
+                        className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 cursor-grab active:cursor-grabbing hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
+                        draggable
+                        onDragStart={(e) => onDragStart(e, component)}
+                      >
+                         <div className="text-zinc-200 font-bold text-sm mb-1">{component.name}</div>
+                         <div className="text-zinc-600 text-[10px] uppercase font-bold tracking-widest">{component.type}</div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
 
-        {/* Canvas */}
-        <div className="flex-1 relative" ref={reactFlowWrapper}>
-          {/* Sidebar Toggle Button */}
+        {/* Canvas Area */}
+        <div className="flex-1 relative z-10" ref={reactFlowWrapper}>
+          
+          {/* Toggle Sidebar Button */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="absolute top-4 left-4 z-20 p-2 border transition-all"
-            style={{
-              backgroundColor: '#040F0E',
-              borderColor: 'rgba(0,255,170,0.3)',
-              color: '#00FFA3',
-              borderRadius: '2px',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#00FFA3';
-              e.currentTarget.style.backgroundColor = '#071512';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(0,255,170,0.3)';
-              e.currentTarget.style.backgroundColor = '#040F0E';
-            }}
+            className="absolute top-6 left-6 z-30 p-3 rounded-2xl bg-zinc-900/80 border border-white/10 text-white hover:bg-zinc-800 transition-all shadow-2xl"
           >
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
           </button>
@@ -538,173 +419,144 @@ export default function WorkspacePage() {
             onDrop={onDrop}
             onDragOver={onDragOver}
           />
+
+          {/* Canvas Labels / Overlays */}
+          <div className="absolute bottom-8 left-8 z-30 pointer-events-none opacity-40 select-none">
+             <div className="text-white font-mono text-[10px] font-bold tracking-[0.5em] uppercase mb-1">Canvas Replicated State</div>
+             <div className="text-zinc-500 font-mono text-[8px] tracking-[0.2em] uppercase">Stable Snapshot_ v1.02.3 // Sector 7</div>
+          </div>
         </div>
 
-        {/* Right inspector */}
-        {selectedNode && (
-          <motion.aside
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, ease: 'linear' }}
-            className="border-l overflow-y-auto"
-            style={{ width: '320px', backgroundColor: '#040F0E', borderColor: 'rgba(0,255,170,0.15)' }}
-          >
-            <div className="p-6">
-              <div
-                className="uppercase mb-6 tracking-widest"
-                style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}
-              >
-                Node Configuration
-              </div>
-              <div className="space-y-4">
-                {(['processingPower', 'coldStartLatency', 'failureRate', 'recoveryTime'] as const).map((field) => (
-                  <div key={field}>
-                    <label className="block mb-2" style={{ color: '#8FA9A3', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>
-                      {field}
-                    </label>
-                    <input
-                      type="text"
-                      defaultValue={
-                        field === 'processingPower' ? '1000ms' :
-                        field === 'coldStartLatency' ? '200ms' :
-                        field === 'failureRate' ? '0.01%' : '500ms'
-                      }
-                      className="w-full border px-3 py-2 outline-none"
-                      style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)', color: '#E6F1EF', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', borderRadius: '2px' }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)')}
-                    />
-                  </div>
-                ))}
+        {/* Right Inspector: Node Config (Glassmorphism) */}
+        <AnimatePresence>
+          {selectedNode && (
+            <motion.aside
+              initial={{ x: 340, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 340, opacity: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-[340px] border-l border-white/5 bg-zinc-950/40 backdrop-blur-3xl p-8 overflow-y-auto z-20 custom-scrollbar"
+            >
+              <div className="flex items-center justify-between mb-8">
+                 <div className="text-blue-500 text-[10px] font-bold uppercase tracking-[0.2em]">Node Inspector</div>
+                 <button onClick={() => setSelectedNode(null)} className="text-zinc-600 hover:text-white transition-colors">
+                    <X size={20} />
+                 </button>
               </div>
 
-              <div className="mt-8 pt-6 border-t" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
-                <div
-                  className="uppercase mb-4 tracking-widest"
-                  style={{ color: '#00FFA3', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}
-                >
-                  Network Edge Config
-                </div>
-                <div className="space-y-4">
-                  {(['latency', 'jitter', 'packetLoss', 'bandwidthLimit'] as const).map((field) => (
-                    <div key={field}>
-                      <label className="block mb-2" style={{ color: '#8FA9A3', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>
-                        {field}
-                      </label>
-                      <input
-                        type="text"
-                        defaultValue={
-                          field === 'latency' ? '50ms' :
-                          field === 'jitter' ? '10ms' :
-                          field === 'packetLoss' ? '0.1%' : '100Mbps'
-                        }
-                        className="w-full border px-3 py-2 outline-none"
-                      style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.2)', color: '#E6F1EF', fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', borderRadius: '2px' }}
-                        onFocus={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
-                        onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.2)')}
-                      />
-                    </div>
-                  ))}
-                </div>
+              <div className="mb-10">
+                 <h3 className="text-white text-xl font-bold tracking-tight mb-2">{selectedNode.data.label}</h3>
+                 <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">{selectedNode.data.type}</p>
               </div>
-            </div>
-          </motion.aside>
-        )}
+
+              <div className="space-y-8">
+                 {/* Runtime Params */}
+                 <div className="space-y-4">
+                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Runtime Vectors</div>
+                    {(['processingPower', 'coldStartLatency', 'failureRate'].map((field) => (
+                       <div key={field} className="space-y-2">
+                          <label className="text-[11px] text-zinc-500 font-medium px-1">{field}</label>
+                          <input
+                            type="text"
+                            defaultValue={field === 'failureRate' ? '0.01%' : '200ms'}
+                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
+                          />
+                       </div>
+                    )))}
+                 </div>
+
+                 {/* Network Params */}
+                 <div className="space-y-4">
+                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Network Latency</div>
+                    {(['latency', 'jitter', 'bandwidthLimit'].map((field) => (
+                       <div key={field} className="space-y-2">
+                          <label className="text-[11px] text-zinc-500 font-medium px-1">{field}</label>
+                          <input
+                            type="text"
+                            defaultValue={field === 'bandwidthLimit' ? '1Gbps' : '20ms'}
+                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
+                          />
+                       </div>
+                    )))}
+                 </div>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* ── TERMINAL ── */}
+      {/* ── TERMINAL (Glassmorphism) ── */}
       <motion.div
-        animate={{ height: terminalExpanded ? '35vh' : '40px' }}
-        transition={{ duration: 0.3, ease: 'linear' }}
-        className="border-t relative z-10"
-        style={{ backgroundColor: '#041615', borderColor: 'rgba(0,255,170,0.25)' }}
+        animate={{ height: terminalExpanded ? '35vh' : '48px' }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/60 backdrop-blur-3xl border-t border-white/10 flex flex-col"
       >
         <button
           onClick={() => setTerminalExpanded(!terminalExpanded)}
-          className="w-full h-10 flex items-center justify-between px-6 transition-colors"
-          style={{ color: '#8FA9A3' }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = '#00FFA3')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '#8FA9A3')}
+          className="h-12 flex items-center justify-between px-10 hover:bg-white/5 transition-colors group"
         >
-          <div className="flex items-center gap-2">
-            <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', fontWeight: 600 }}>TERMINAL</span>
-            {logs.length > 0 && <div className="rounded-full" style={{ width: '6px', height: '6px', backgroundColor: '#00FFA3' }} />}
+          <div className="flex items-center gap-3">
+             <Terminal size={16} className="text-blue-500" />
+             <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500 group-hover:text-blue-400 transition-colors">Simulation Runtime Log</span>
+             {logs.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />}
           </div>
-          {terminalExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          <div className="text-zinc-600">
+             {terminalExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+          </div>
         </button>
 
-        {terminalExpanded && (
-          <div className="px-6 pb-6 overflow-y-auto" style={{ height: 'calc(35vh - 40px)' }}>
-            <div className="space-y-1" style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
-              {logs.map((log, i) => {
-                let color = '#8FA9A3';
-                if (log.includes('[WARN]'))  color = '#00FFA3';
-                if (log.includes('[ERROR]') || log.includes('[FATAL]')) color = '#FF3B3B';
-                if (log.includes('GRADE') || log.includes('SYNCED')) color = '#00FFA3';
-                return (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.2, ease: 'linear' }}
-                    style={{ color }}
-                  >
-                    {log}
-                  </motion.div>
-                );
-              })}
-              {logs.length > 0 && !simulationComplete && (
-                <motion.span
-                  animate={{ opacity: [1, 0, 1] }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                  style={{ color: '#00FFA3' }}
-                >
-                  _
-                </motion.span>
-              )}
-            </div>
+        <div className="flex-1 overflow-hidden p-10 pt-4">
+          <div className="h-full bg-black/40 rounded-3xl border border-white/5 p-8 overflow-y-auto custom-scrollbar font-mono text-xs leading-relaxed">
+            {logs.map((log, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={`mb-2 ${log.includes('[WARN]') ? 'text-blue-400' : log.includes('GRADE') ? 'text-white font-bold' : 'text-zinc-600'}`}
+              >
+                <span className="text-zinc-800 mr-4 select-none">[{i+1}]</span>
+                {log}
+              </motion.div>
+            ))}
+            
+            {logs.length > 0 && !simulationComplete && (
+              <motion.div
+                animate={{ opacity: [1, 0] }}
+                transition={{ repeat: Infinity, duration: 0.8 }}
+                className="w-1.5 h-4 bg-blue-500 inline-block ml-1"
+              />
+            )}
 
-            {/* View Report Button */}
             {simulationComplete && (
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: 'linear' }}
-                className="mt-6"
+                className="mt-8 pt-8 border-t border-white/5 flex items-center gap-6"
               >
-                <button
-                  onClick={() => setIsReportOpen(true)}
-                  className="px-5 py-3 flex items-center gap-2 transition-all iz-btn-green"
-                  style={{
-                    color: '#020908',
-                    borderRadius: '2px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                  }}
-                >
-                  <span style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to left, rgba(0,43,26,0), #020908)', animation: 'izAnimateTop 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
-                  <span style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: '2px', background: 'linear-gradient(to top, rgba(0,43,26,0), #020908)', animation: 'izAnimateRight 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
-                  <span style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '2px', background: 'linear-gradient(to right, rgba(0,43,26,0), #020908)', animation: 'izAnimateBottom 2s linear infinite', pointerEvents: 'none', zIndex: 2 }} />
-                  <span style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '2px', background: 'linear-gradient(to bottom, rgba(0,43,26,0), #020908)', animation: 'izAnimateLeft 2s linear -1s infinite', pointerEvents: 'none', zIndex: 2 }} />
-                  VIEW REPORT
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.8 }}>
-                    ANALYSIS
-                  </span>
-                </button>
+                 <div className="text-zinc-500 text-sm">Simulation terminated successfully. Deterministic hash stable.</div>
+                 <button
+                   onClick={() => setIsReportOpen(true)}
+                   className="iz-btn-blue relative overflow-hidden py-3 px-10 rounded-2xl text-white font-bold text-sm shadow-2xl"
+                 >
+                    <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                    View Detailed Report Analysis
+                 </button>
               </motion.div>
             )}
           </div>
-        )}
+        </div>
       </motion.div>
 
-      {/* Import Diagram Popup */}
+      {/* Popups */}
       <ImportDiagramPopup
         isOpen={isImportPopupOpen}
         onClose={() => setIsImportPopupOpen(false)}
         onImport={handleImportDiagram}
       />
 
-      {/* Report View */}
       <ReportView
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
@@ -712,29 +564,29 @@ export default function WorkspacePage() {
         reportData={{
           simulationId: '847293',
           universeSeed: '783492',
-          stableHash: 'a7c4f9d2e8b3f1a5...',
-          grade: 'B-',
-          gradeColor: '#00FFA3',
-          status: 'PASS — System Stabilized',
-          statusColor: '#00FFA3',
+          stableHash: 'a7c4f9d2e8b3f1a588b2c45...',
+          grade: 'B+',
+          gradeColor: '#3B82F6',
+          status: 'STABLE — PASS',
+          statusColor: '#3B82F6',
           totalRequests: 10000,
           failedRequests: 142,
-          peakLatency: 1284,
-          collapseTime: '00:02:14',
+          peakLatency: 323,
+          collapseTime: '—',
           rootCause: {
-            summary: 'The architecture experienced minor performance degradation because of a Single Point of Failure at the Load Balancer. Under high concurrency, the Load Balancer exceeded its processing capacity, leading to request queue saturation and cascading downstream failures before stabilization.',
+            summary: 'The architecture maintained high availability through localized backpressure. A minor latency spike was detected at the Gateway layer, likely due to peak concurrent TLS handshakes, but the system remained functionally deterministic.',
             details: [
-              { label: 'Load Balancer capacity', value: '500 req/sec' },
-              { label: 'Incoming traffic', value: '1,200 req/sec' },
-              { label: 'Retry logic amplified failure rate', value: 'Yes' },
-              { label: 'No horizontal scaling configured', value: 'True' },
+              { label: 'Max Concurrency', value: '1,200 req/sec' },
+              { label: 'Gateway Latency', value: '323ms (Peak)' },
+              { label: 'Thread Safety', value: 'Verified' },
+              { label: 'Memory Pressure', value: 'Nominal' },
             ],
           },
           recommendations: [
-            'Introduce horizontal scaling for Load Balancer.',
-            'Implement circuit breaker pattern at API gateway.',
-            'Add Redis caching layer before database calls.',
-            'Adjust retry backoff strategy to prevent amplification.',
+            'Introduce horizontal scaling for Load Balancer nodes.',
+            'Implement circuit breaker pattern at API gateway layer.',
+            'Configure Redis caching for hot path session storage.',
+            'Adjust ephemeral worker heap size for stability.',
           ],
           latencyData: [
             { time: 0, latency: 45 },
@@ -744,21 +596,51 @@ export default function WorkspacePage() {
             { time: 40, latency: 120 },
             { time: 50, latency: 185 },
             { time: 60, latency: 280 },
-            { time: 70, latency: 450 },
-            { time: 80, latency: 680 },
-            { time: 90, latency: 920 },
-            { time: 100, latency: 1150 },
-            { time: 110, latency: 1284 },
-            { time: 120, latency: 980 },
-            { time: 130, latency: 620 },
-            { time: 140, latency: 380 },
-            { time: 150, latency: 210 },
-            { time: 160, latency: 110 },
-            { time: 170, latency: 72 },
-            { time: 180, latency: 58 },
+            { time: 70, latency: 323 },
+            { time: 80, latency: 210 },
+            { time: 90, latency: 140 },
+            { time: 100, latency: 85 },
+            { time: 120, latency: 62 },
+            { time: 140, latency: 55 },
+            { time: 160, latency: 48 },
+            { time: 180, latency: 45 },
           ],
         }}
       />
+      
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.05);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(59, 130, 246, 0.2);
+        }
+      `}</style>
     </div>
   );
 }
+
+const X = ({ size, className, onClick }: { size?: number, className?: string, onClick?: () => void }) => (
+  <svg 
+    width={size || 24} 
+    height={size || 24} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+    onClick={onClick}
+  >
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+);

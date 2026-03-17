@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Upload, ChevronDown, ChevronRight, Check, AlertCircle } from 'lucide-react';
 
 interface ImportDiagramPopupProps {
   isOpen: boolean;
@@ -17,7 +17,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
   const [hasError, setHasError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock detection data
+  // Mock detection data (Updated to Blue Theme)
   const detectionData = {
     confidence: 87,
     nodes: [
@@ -45,19 +45,17 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
     setUploadedFile(file);
     setIsProcessing(true);
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreviewUrl(e.target?.result as string);
     };
     reader.readAsDataURL(file);
 
-    // Simulate extraction process
     const logs = [
-      '[OCR] Extracting labels...',
-      '[AI] Normalizing topology...',
-      '[GRAPH] Deterministic projection stable',
-      '[SEED] Universe Seed assigned: 847293',
+      '[OCR] Analyzing pixel density...',
+      '[AI] Extracting topology clusters...',
+      '[GRAPH] Mapping to brand-blue deterministic primitives...',
+      '[SEED] Universe Vector stable: 847.293',
     ];
 
     setExtractionLogs([]);
@@ -82,10 +80,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
   };
 
   const handleImportClick = () => {
-    // Close popup
     onClose();
-
-    // Generate mock nodes and edges from detection data
     const mockNodes = [
       { id: 'imported-1', type: 'custom', position: { x: 100, y: 50 }, data: { label: 'Load Balancer', type: 'Load Balancer', isActive: false } },
       { id: 'imported-2', type: 'custom', position: { x: 50, y: 200 }, data: { label: 'API Service 1', type: 'Node Service', isActive: false } },
@@ -93,331 +88,193 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
       { id: 'imported-4', type: 'custom', position: { x: 100, y: 350 }, data: { label: 'PostgreSQL', type: 'Database', isActive: false } },
       { id: 'imported-5', type: 'custom', position: { x: 300, y: 350 }, data: { label: 'Redis Cache', type: 'Cache', isActive: false } },
     ];
-
     const mockEdges = [
       { id: 'ie1', source: 'imported-1', target: 'imported-2' },
       { id: 'ie2', source: 'imported-1', target: 'imported-3' },
       { id: 'ie3', source: 'imported-2', target: 'imported-4' },
       { id: 'ie4', source: 'imported-3', target: 'imported-5' },
     ];
-
     onImport(mockNodes, mockEdges);
-  };
-
-  const handleReset = () => {
-    setUploadedFile(null);
-    setPreviewUrl(null);
-    setExtractionLogs([]);
-    setIsProcessing(false);
-    setHasError(false);
-    setShowMappingControls(false);
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'linear' }}
-            className="fixed inset-0 z-40"
-            style={{ backgroundColor: 'rgba(2, 9, 8, 0.8)' }}
+            className="absolute inset-0 bg-black/80 backdrop-blur-md"
             onClick={onClose}
           />
 
-          {/* Popup */}
+          {/* Popup Wrapper */}
           <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.25, ease: 'linear' }}
-            drag
-            dragConstraints={{
-              top: -window.innerHeight * 0.4,
-              left: -window.innerWidth * 0.4,
-              right: window.innerWidth * 0.4,
-              bottom: window.innerHeight * 0.4,
-            }}
-            dragElastic={0}
-            dragMomentum={false}
-            className="fixed z-50 border overflow-hidden flex flex-col"
-            style={{
-              left: '50%',
-              top: '50%',
-              x: '-50%',
-              y: '-50%',
-              width: '450px',
-              maxHeight: '70vh',
-              backgroundColor: '#071512',
-              borderColor: 'rgba(0,255,170,0.25)',
-              borderRadius: '2px',
-              cursor: 'move',
-            }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-xl bg-zinc-900/40 backdrop-blur-3xl border border-white/10 rounded-[32px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header Accent */}
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-blue-500/50 to-transparent" />
+
             {/* Header */}
-            <div
-              className="px-6 py-4 border-b"
-              style={{ borderColor: 'rgba(0,255,170,0.15)' }}
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 style={{ color: '#E6F1EF', fontSize: '16px', fontWeight: 500, marginBottom: '4px' }}>
-                    Import Architecture Diagram
-                  </h2>
-                  <p style={{ color: '#8FA9A3', fontSize: '13px' }}>
-                    Convert PNG, JPG, or SVG into simulation nodes.
-                  </p>
-                </div>
-                <button
-                  onClick={onClose}
-                  className="transition-colors"
-                  style={{ color: '#8FA9A3', padding: '4px' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = '#00FFA3')}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = '#8FA9A3')}
-                >
-                  <X size={18} />
-                </button>
+            <div className="px-10 pt-10 pb-6 flex items-start justify-between">
+              <div>
+                <h2 className="text-white text-2xl font-bold tracking-tight mb-2">Import Architecture</h2>
+                <p className="text-zinc-500 text-sm leading-relaxed max-w-[320px]">
+                  Convert diagrams into high-fidelity simulation nodes using technical vision analysis.
+                </p>
               </div>
+              <button
+                onClick={onClose}
+                className="p-2 rounded-full hover:bg-white/5 text-zinc-500 hover:text-white transition-all"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {/* File Input */}
-              {!uploadedFile && (
-                <div
-                  className="border-dashed border-2 p-8 text-center cursor-pointer transition-all"
-                  style={{
-                    backgroundColor: '#020908',
-                    borderColor: 'rgba(0,255,170,0.4)',
-                    borderRadius: '2px',
-                  }}
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto px-10 pb-10 space-y-6">
+              
+              {!uploadedFile ? (
+                /* Upload Area */
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  onClick={() => fileInputRef.current?.click()}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
-                  onClick={() => fileInputRef.current?.click()}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(0,255,170,0.6)';
-                    e.currentTarget.style.backgroundColor = '#041615';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(0,255,170,0.4)';
-                    e.currentTarget.style.backgroundColor = '#020908';
-                  }}
+                  className="group relative border-2 border-dashed border-white/10 rounded-3xl p-12 text-center cursor-pointer hover:border-blue-500/40 hover:bg-blue-500/5 transition-all"
                 >
-                  <Upload size={32} style={{ color: '#00FFA3', margin: '0 auto 12px' }} />
-                  <p style={{ color: '#E6F1EF', fontSize: '14px', marginBottom: '4px' }}>
-                    Drop diagram here or click to upload
-                  </p>
-                  <p style={{ color: '#8FA9A3', fontSize: '12px', fontFamily: 'JetBrains Mono, monospace' }}>
-                    PNG · JPG · SVG
-                  </p>
+                  <div className="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
+                    <Upload className="text-blue-500" size={28} />
+                  </div>
+                  <p className="text-white font-bold text-lg mb-1">Upload Diagram Image</p>
+                  <p className="text-zinc-500 text-sm">PNG, JPG, or SVG supported. Max 10MB.</p>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/svg+xml"
-                    style={{ display: 'none' }}
+                    accept="image/*"
+                    className="hidden"
                     onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
                   />
-                </div>
-              )}
-
-              {/* Error State */}
-              {hasError && (
-                <div className="border p-4" style={{ backgroundColor: '#020908', borderColor: '#FF3B3B', borderRadius: '2px' }}>
-                  <p style={{ color: '#FF3B3B', fontSize: '14px', fontWeight: 500, marginBottom: '4px' }}>
-                    Unable to detect structured topology.
-                  </p>
-                  <p style={{ color: '#8FA9A3', fontSize: '12px' }}>
-                    Ensure labels are visible and nodes are clearly separated.
-                  </p>
-                </div>
-              )}
-
-              {/* Preview + Detection Summary */}
-              {uploadedFile && previewUrl && !hasError && (
-                <div className="space-y-4">
-                  {/* Preview */}
-                  <div className="relative border" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px', padding: '12px' }}>
+                </motion.div>
+              ) : (
+                /* Preview & Processing Area */
+                <div className="space-y-6">
+                  {/* Image Preview Container */}
+                  <div className="relative rounded-2xl border border-white/10 bg-black/40 p-3 overflow-hidden">
                     <img
-                      src={previewUrl}
-                      alt="Diagram preview"
-                      style={{ width: '100%', height: 'auto', maxHeight: '180px', objectFit: 'contain' }}
+                      src={previewUrl!}
+                      alt="Diagram Preview"
+                      className="w-full h-auto max-h-[220px] object-contain rounded-xl"
                     />
                     {!isProcessing && (
-                      <div
-                        className="absolute top-4 right-4 px-2 py-1"
-                        style={{
-                          backgroundColor: 'rgba(2,9,8,0.95)',
-                          border: '1px solid rgba(0,255,170,0.3)',
-                          borderRadius: '2px',
-                        }}
-                      >
-                        <span style={{ color: '#00FFA3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>
-                          {detectionData.confidence}% CONFIDENCE
+                      <div className="absolute top-6 right-6 px-3 py-1.5 rounded-full bg-blue-500/20 backdrop-blur-md border border-blue-500/30">
+                        <span className="text-blue-400 font-mono text-[10px] font-bold tracking-widest uppercase">
+                          {detectionData.confidence}% Confidence
                         </span>
                       </div>
                     )}
                   </div>
 
-                  {/* Extraction Summary */}
-                  {!isProcessing && (
-                    <div className="border p-4" style={{ backgroundColor: '#020908', borderColor: 'rgba(0,255,170,0.25)', borderRadius: '2px' }}>
-                      <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px' }}>
-                        <p style={{ color: '#8FA9A3', marginBottom: '8px' }}>Detected Nodes:</p>
-                        <div className="space-y-1 mb-4">
-                          {detectionData.nodes.map((node, i) => (
-                            <div key={i} className="flex items-center justify-between">
-                              <span style={{ color: '#8FA9A3' }}>{node.label}</span>
-                              <span style={{ color: '#00FFA3' }}>({node.count})</span>
-                            </div>
-                          ))}
-                        </div>
-                        <p style={{ color: '#8FA9A3', marginBottom: '8px' }}>Detected Relationships:</p>
-                        <div className="space-y-1">
-                          {detectionData.relationships.map((rel, i) => (
-                            <div key={i} style={{ color: '#00FFA3' }}>
-                              {rel.from} → {rel.to}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                  {/* Processing Logs (Terminal Style) */}
+                  <div className="rounded-2xl bg-black/60 border border-white/5 p-5 font-mono text-[11px] leading-6 h-[120px] overflow-hidden relative">
+                    <div className="absolute top-3 right-5 flex gap-2">
+                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500/30" />
+                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500/30" />
                     </div>
-                  )}
-
-                  {/* Mapping Controls */}
-                  {!isProcessing && (
-                    <div>
-                      <button
-                        onClick={() => setShowMappingControls(!showMappingControls)}
-                        className="flex items-center gap-2 w-full transition-colors"
-                        style={{ color: '#8FA9A3', fontSize: '13px', fontWeight: 500 }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = '#00FFA3')}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = '#8FA9A3')}
+                    {extractionLogs.map((log, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: -5 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className={log.includes('[GRAPH]') ? 'text-blue-400' : 'text-zinc-500'}
                       >
-                        {showMappingControls ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        Adjust Component Mapping
-                      </button>
-
-                      {showMappingControls && (
-                        <div className="mt-3 space-y-3 pl-6">
-                          {[
-                            { detected: 'EC2', mapped: 'Compute Service' },
-                            { detected: 'RDS', mapped: 'Database Actor' },
-                          ].map((mapping, i) => (
-                            <div key={i} className="space-y-2">
-                              <div style={{ color: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
-                                Detected: "{mapping.detected}"
-                              </div>
-                              <div style={{ color: '#8FA9A3', fontSize: '11px', fontFamily: 'JetBrains Mono, monospace' }}>
-                                Mapped to:
-                              </div>
-                              <select
-                                className="w-full border px-3 py-2 outline-none"
-                                style={{
-                                  backgroundColor: '#020908',
-                                  borderColor: 'rgba(0,255,170,0.25)',
-                                  color: '#E6F1EF',
-                                  fontSize: '12px',
-                                  fontFamily: 'JetBrains Mono, monospace',
-                                  borderRadius: '2px',
-                                }}
-                                onFocus={(e) => (e.currentTarget.style.borderColor = '#00FFA3')}
-                                onBlur={(e) => (e.currentTarget.style.borderColor = 'rgba(0,255,170,0.25)')}
-                              >
-                                <option>{mapping.mapped}</option>
-                                <option>Load Balancer</option>
-                                <option>API Gateway</option>
-                                <option>Cache Service</option>
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* AI Extraction Log */}
-              {uploadedFile && extractionLogs.length > 0 && (
-                <div className="border p-3" style={{ backgroundColor: '#041615', borderColor: 'rgba(0,255,170,0.2)', borderRadius: '2px' }}>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
-                    {extractionLogs.map((log, i) => {
-                      let color = '#8FA9A3';
-                      if (log.includes('[GRAPH]') || log.includes('[SEED]')) color = '#00FFA3';
-                      return (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ duration: 0.15, ease: 'linear' }}
-                          style={{ color, marginBottom: '4px' }}
-                        >
-                          {log}
-                        </motion.div>
-                      );
-                    })}
+                        {log}
+                      </motion.div>
+                    ))}
                     {isProcessing && (
-                      <motion.span
-                        animate={{ opacity: [1, 0, 1] }}
-                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                        style={{ color: '#00FFA3' }}
-                      >
-                        _
-                      </motion.span>
+                      <motion.div animate={{ opacity: [1, 0] }} transition={{ repeat: Infinity, duration: 0.8 }} className="text-blue-400 inline-block">_</motion.div>
                     )}
                   </div>
+
+                  {/* Result Summary */}
+                  {!isProcessing && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+                       <div className="grid grid-cols-2 gap-4">
+                          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                             <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Topology</div>
+                             <div className="text-white font-bold">{detectionData.nodes.length} Components</div>
+                          </div>
+                          <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                             <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Flows</div>
+                             <div className="text-white font-bold">{detectionData.relationships.length} Edges</div>
+                          </div>
+                       </div>
+
+                       {/* Mapping Disclosure */}
+                       <div>
+                          <button
+                            onClick={() => setShowMappingControls(!showMappingControls)}
+                            className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors text-xs font-bold uppercase tracking-wider"
+                          >
+                            {showMappingControls ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            Verify component mappings
+                          </button>
+                          {showMappingControls && (
+                            <div className="mt-4 p-5 rounded-2xl border border-white/5 bg-white/[0.02] space-y-4">
+                               {detectionData.nodes.map((node, i) => (
+                                 <div key={i} className="flex items-center justify-between text-xs">
+                                    <span className="text-zinc-500 font-mono tracking-tight">{node.label}</span>
+                                    <span className="text-blue-500 font-bold uppercase tracking-tighter">Recognized</span>
+                                 </div>
+                               ))}
+                            </div>
+                          )}
+                       </div>
+                    </motion.div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Footer */}
-            <div className="border-t px-6 py-4 flex items-center justify-between" style={{ borderColor: 'rgba(0,255,170,0.15)' }}>
+            {/* Footer Actions */}
+            <div className="px-10 py-8 border-t border-white/10 bg-black/20 flex items-center justify-between">
               <button
-                onClick={uploadedFile ? handleReset : onClose}
-                className="transition-colors"
-                style={{ color: '#8FA9A3', fontSize: '13px', fontWeight: 500 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#00FFA3')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#8FA9A3')}
+                onClick={onClose}
+                className="text-zinc-500 hover:text-white font-bold text-sm transition-colors py-2"
               >
-                {uploadedFile ? 'Reset' : 'Cancel'}
+                DISCARD
               </button>
 
-              <button
-                onClick={handleImportClick}
+              <motion.button
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 disabled={!uploadedFile || isProcessing}
-                className="px-4 py-2 flex items-center gap-2 transition-all"
-                style={{
-                  backgroundColor: uploadedFile && !isProcessing ? '#00FFA3' : '#040F0E',
-                  color: uploadedFile && !isProcessing ? '#020908' : '#8FA9A3',
-                  borderRadius: '2px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  opacity: uploadedFile && !isProcessing ? 1 : 0.5,
-                  cursor: uploadedFile && !isProcessing ? 'pointer' : 'not-allowed',
-                }}
-                onMouseEnter={(e) => {
-                  if (uploadedFile && !isProcessing) {
-                    e.currentTarget.style.backgroundColor = '#00D98C';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (uploadedFile && !isProcessing) {
-                    e.currentTarget.style.backgroundColor = '#00FFA3';
-                  }
-                }}
+                onClick={handleImportClick}
+                className={`iz-btn-blue relative overflow-hidden py-3 px-8 rounded-xl text-white font-bold text-sm shadow-xl transition-all ${
+                  (!uploadedFile || isProcessing) ? 'opacity-30 grayscale cursor-not-allowed' : 'opacity-100'
+                }`}
               >
-                Import to Canvas
-                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '10px', opacity: 0.8 }}>
-                  COMPILE
-                </span>
-              </button>
+                {/* Border Animation */}
+                {uploadedFile && !isProcessing && (
+                   <>
+                    <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
+                    <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
+                   </>
+                )}
+                Compile to Canvas
+              </motion.button>
             </div>
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );
