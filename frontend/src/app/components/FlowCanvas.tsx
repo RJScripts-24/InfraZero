@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -26,35 +26,41 @@ const handleStyleBase = {
 const handleHidden  = { ...handleStyleBase, opacity: 0 };
 const handleVisible = { ...handleStyleBase, opacity: 1 };
 
-// ── Per-type border accent colours (Unified Blue/Silver) ─────────────────────
-const TYPE_ACCENT: Record<string, string> = {
-  'Load Balancer': 'rgba(59,130,246,0.6)',
-  'Node Service':  'rgba(96,165,250,0.5)',
-  'Database':      'rgba(147,197,253,0.5)',
-  'Cache':         'rgba(191,219,254,0.5)',
-  'Background Job':'rgba(59,130,246,0.5)',
-  'RabbitMQ':      'rgba(30,64,175,0.5)',
-  'Edge Network':  'rgba(96,165,250,0.5)',
-  'Gateway':       'rgba(59,130,246,0.6)',
-};
-
-const getAccent = (type: string) => TYPE_ACCENT[type] ?? 'rgba(59,130,246,0.4)';
-
-const CustomNode = memo(({ data }: { data: any }) => {
+const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
   const [hovered, setHovered] = useState(false);
+
+  const currentSnapshot = data.simulationSnapshots?.[data.currentTick];
+  const nodeMetrics = currentSnapshot?.nodeMetrics || currentSnapshot?.node_metrics || [];
+  const nodeMetric = nodeMetrics.find((m: any) => {
+    const metricNodeId = m?.nodeId ?? m?.node_id ?? m?.id;
+    return String(metricNodeId) === String(id);
+  });
+  const metricState = String(nodeMetric?.state ?? nodeMetric?.nodeState ?? '').toLowerCase();
+  const metricErrorRate = Number(nodeMetric?.errorRate ?? nodeMetric?.error_rate ?? 0);
+  const metricIsOverloaded = Boolean(nodeMetric?.isOverloaded ?? nodeMetric?.is_overloaded);
+  const metricQueueDepth = Number(nodeMetric?.queueDepth ?? nodeMetric?.queue_depth ?? 0);
+
+  const nodeColor = useMemo(() => {
+    if (!nodeMetric) return 'rgba(59,130,246,0.15)';
+    if (metricState === 'dead' || metricState === 'failed' || metricIsOverloaded) return 'rgba(239,68,68,0.25)';
+    if (metricErrorRate > 0.1 || metricState === 'degraded' || metricState === 'restarting') return 'rgba(245,158,11,0.25)';
+    return 'rgba(16,185,129,0.20)';
+  }, [nodeMetric, metricState, metricErrorRate, metricIsOverloaded]);
+
+  const nodeBorderColor = useMemo(() => {
+    if (!nodeMetric) return 'rgba(59,130,246,0.4)';
+    if (metricState === 'dead' || metricState === 'failed' || metricIsOverloaded) return 'rgba(239,68,68,0.8)';
+    if (metricErrorRate > 0.1 || metricState === 'degraded' || metricState === 'restarting') return 'rgba(245,158,11,0.8)';
+    return 'rgba(16,185,129,0.6)';
+  }, [nodeMetric, metricState, metricErrorRate, metricIsOverloaded]);
 
   let statusColor = '#3F3F46'; // Zinc-600
   if (data.isActive)     statusColor = '#3B82F6';
   if (data.isOverloaded) statusColor = '#EF4444';
 
-  const accent     = getAccent(data.type);
   const isSelected = !!data.selected;
 
-  const borderColor = isSelected
-    ? '#3B82F6'
-    : hovered
-    ? accent.replace(/,[^,]+\)$/, ',0.8)')
-    : accent;
+  const borderColor = nodeBorderColor;
 
   const shadow = isSelected
     ? '0 0 0 1px rgba(59,130,246,0.3), 0 0 25px rgba(59,130,246,0.2), 0 8px 30px rgba(0,0,0,0.8)'
@@ -63,14 +69,19 @@ const CustomNode = memo(({ data }: { data: any }) => {
     : '0 4px 15px rgba(0,0,0,0.6)';
 
   const hs = hovered ? handleVisible : handleHidden;
+  const nodeClassName = [
+    data.isKilled ? 'ring-2 ring-red-500 opacity-40' : '',
+    !data.isKilled && data.isDegraded ? 'ring-2 ring-amber-500 opacity-70' : '',
+  ].filter(Boolean).join(' ');
 
   return (
     <div
-      className={data.isKilled ? 'ring-2 ring-red-500 opacity-50' : ''}
+      className={nodeClassName}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         background: 'rgba(24, 24, 27, 0.4)', // bg-zinc-900/40
+        backgroundColor: nodeColor,
         backdropFilter: 'blur(16px)',
         borderColor,
         borderWidth: isSelected ? '2px' : '1px',
@@ -84,6 +95,10 @@ const CustomNode = memo(({ data }: { data: any }) => {
         overflow: 'hidden',
       }}
     >
+      {metricIsOverloaded && (
+        <div className="absolute inset-0 rounded-2xl animate-ping border-2 border-red-500/40 pointer-events-none" />
+      )}
+
       {/* Subtle blue top-edge highlight */}
       <div style={{
         position: 'absolute', top: 0, left: '10%', right: '10%',
@@ -105,9 +120,18 @@ const CustomNode = memo(({ data }: { data: any }) => {
           fontWeight: isSelected ? 700 : 600,
           fontFamily: 'Inter, sans-serif',
           letterSpacing: '-0.01em',
+          textDecoration: data.isKilled ? 'line-through' : 'none',
         }}>
           {data.label}
         </div>
+        {data.isSimulating && nodeMetric && (
+          <div
+            className="text-[9px] font-mono mt-1 opacity-70"
+            style={{ color: metricQueueDepth > 50 ? '#ef4444' : '#6b7280' }}
+          >
+            Q:{metricQueueDepth}
+          </div>
+        )}
         <div style={{
           width: '8px', height: '8px', borderRadius: '50%',
           backgroundColor: statusColor,
@@ -156,6 +180,19 @@ interface FlowCanvasProps {
   onDrop: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
   killedNodes?: Set<string>;
+  degradedNodes?: Set<string>;
+  simulationSnapshots?: Array<{
+    tick: number;
+    nodeMetrics: Array<{
+      nodeId: string;
+      errorRate: number;
+      isOverloaded: boolean;
+      queueDepth: number;
+      state: string;
+    }>;
+  }>;
+  currentTick?: number;
+  isSimulating?: boolean;
 }
 
 export const FlowCanvas = memo(({
@@ -169,17 +206,52 @@ export const FlowCanvas = memo(({
   onDrop,
   onDragOver,
   killedNodes,
+  degradedNodes,
+  simulationSnapshots,
+  currentTick,
+  isSimulating,
 }: FlowCanvasProps) => {
+  const SimPacketDots = ({ edges, isSimulating }: { edges: any[]; isSimulating: boolean }) => {
+    const [, setDots] = useState<Array<{ id: string; edgeId: string; progress: number }>>([]);
+
+    useEffect(() => {
+      if (!isSimulating) {
+        setDots([]);
+        return;
+      }
+      const interval = setInterval(() => {
+        setDots((prev) => {
+          const moved = prev
+            .map((d) => ({ ...d, progress: d.progress + 0.05 }))
+            .filter((d) => d.progress < 1);
+          if (Math.random() < 0.4 && edges.length > 0) {
+            const edge = edges[Math.floor(Math.random() * edges.length)];
+            moved.push({ id: `dot-${Date.now()}-${Math.random()}`, edgeId: edge.id, progress: 0 });
+          }
+          return moved.slice(-30);
+        });
+      }, 50);
+      return () => clearInterval(interval);
+    }, [isSimulating, edges]);
+
+    return null;
+  };
+
   const decoratedNodes = nodes.map((node) => ({
     ...node,
     data: {
       ...(node.data || {}),
       isKilled: killedNodes?.has(node.id) ?? false,
+      isDegraded: degradedNodes?.has(node.id) ?? false,
+      simulationSnapshots,
+      currentTick,
+      isSimulating,
     },
   }));
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <SimPacketDots edges={edges} isSimulating={!!isSimulating} />
       <ReactFlow
         nodes={decoratedNodes}
         edges={edges}

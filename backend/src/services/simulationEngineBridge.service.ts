@@ -34,6 +34,17 @@ interface EngineSnapshot {
   tick: number;
   simTimeMs: number;
   nodeMetrics: Array<{
+    nodeId?: string;
+    node_id?: string;
+    errorRate?: number;
+    error_rate?: number;
+    isOverloaded?: boolean;
+    is_overloaded?: boolean;
+    queueDepth?: number;
+    queue_depth?: number;
+    requestsReceived?: number;
+    requests_received?: number;
+    state?: string;
     p99LatencyMs: number;
   }>;
 }
@@ -60,6 +71,19 @@ export interface EngineRunResult {
   peakLatency: number;
   recommendations: string[];
   latencyData: Array<{ time: number; latency: number }>;
+  snapshots: Array<{
+    tick: number;
+    simTimeMs: number;
+    nodeMetrics: Array<{
+      nodeId: string;
+      errorRate: number;
+      isOverloaded: boolean;
+      queueDepth: number;
+      requestsReceived: number;
+      state: string;
+      p99LatencyMs: number;
+    }>;
+  }>;
   collapseTime: string;
   rootCause: {
     summary: string;
@@ -200,6 +224,30 @@ const buildLatencyTimeline = (snapshots: EngineSnapshot[]): Array<{ time: number
   });
 };
 
+const normalizeSnapshots = (snapshots: EngineSnapshot[] | undefined): EngineRunResult['snapshots'] => {
+  if (!Array.isArray(snapshots)) {
+    return [];
+  }
+
+  return snapshots.map((snapshot: any) => {
+    const rawNodeMetrics = snapshot?.nodeMetrics || snapshot?.node_metrics || [];
+
+    return {
+      tick: Number(snapshot?.tick ?? 0),
+      simTimeMs: Number(snapshot?.simTimeMs ?? snapshot?.sim_time_ms ?? 0),
+      nodeMetrics: rawNodeMetrics.map((node: any) => ({
+        nodeId: String(node?.nodeId ?? node?.node_id ?? ''),
+        errorRate: Number(node?.errorRate ?? node?.error_rate ?? 0),
+        isOverloaded: Boolean(node?.isOverloaded ?? node?.is_overloaded),
+        queueDepth: Number(node?.queueDepth ?? node?.queue_depth ?? 0),
+        requestsReceived: Number(node?.requestsReceived ?? node?.requests_received ?? 0),
+        state: String(node?.state ?? ''),
+        p99LatencyMs: Number(node?.p99LatencyMs ?? node?.p99_latency_ms ?? 0),
+      })),
+    };
+  });
+};
+
 const buildRootCauseDetails = (rootCause: EngineRootCause, totalFailures: number, peakLatency: number): Array<{ label: string; value: string }> => {
   const details: Array<{ label: string; value: string }> = [
     { label: 'Primary Cause', value: rootCause.primaryCause },
@@ -214,6 +262,31 @@ const buildRootCauseDetails = (rootCause: EngineRootCause, totalFailures: number
   return details;
 };
 
+const normalizeChaosKind = (kind: unknown): string => {
+  const raw = String(kind || '');
+  const directMap: Record<string, string> = {
+    KillNode: 'kill_node',
+    DegradeNode: 'cpu_spike',
+    LatencySpike: 'memory_pressure',
+  };
+  if (directMap[raw]) {
+    return directMap[raw];
+  }
+  const alreadySnake = raw.toLowerCase();
+  return alreadySnake;
+};
+
+const normalizeChaosEvents = (events: any[] | undefined): any[] => {
+  if (!Array.isArray(events)) {
+    return [];
+  }
+
+  return events.map((event) => ({
+    ...event,
+    kind: normalizeChaosKind(event?.kind),
+  }));
+};
+
 export const runSimulationWithEngine = (
   nodes: CustomNode[],
   edges: CustomEdge[],
@@ -225,6 +298,8 @@ export const runSimulationWithEngine = (
     throw new Error('Simulation engine module is unavailable.');
   }
 
+  const normalizedChaosEvents = normalizeChaosEvents(options?.chaosEvents);
+
   const normalizedInput = {
     nodes: normalizeNodes(nodes),
     edges: normalizeEdges(edges),
@@ -235,7 +310,9 @@ export const runSimulationWithEngine = (
       baseline_rps: 900,
       peak_rps_multiplier: 3,
       chaos_enabled: options?.chaosEnabled ?? false,
-      chaos_events: options?.chaosEvents ?? [],
+      chaos_events: normalizedChaosEvents,
+      chaosEnabled: options?.chaosEnabled ?? false,
+      chaosEvents: normalizedChaosEvents,
       full_trace: false,
     },
   };
@@ -254,6 +331,7 @@ export const runSimulationWithEngine = (
   }
 
   const latencyData = buildLatencyTimeline(output.snapshots || []);
+  const snapshots = normalizeSnapshots(output.snapshots || []);
   const peakLatency = latencyData.reduce((max, point) => Math.max(max, point.latency), 0);
 
   const graphHash = output.graphHash || engine.get_graph_hash(JSON.stringify(normalizedInput));
@@ -268,6 +346,7 @@ export const runSimulationWithEngine = (
     peakLatency,
     recommendations: output.rootCause?.recommendations || ['Increase horizontal redundancy in critical services.'],
     latencyData,
+    snapshots,
     collapseTime: output.crashTick === null || output.crashTick === undefined ? '-' : `${output.crashTick}`,
     rootCause: {
       summary: output.rootCause?.summary || 'Simulation completed with limited diagnostics.',

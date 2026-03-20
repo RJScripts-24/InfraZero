@@ -94,8 +94,13 @@ export default function WorkspacePage() {
   const [simulationComplete, setSimulationComplete] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [simulationResult, setSimulationResult] = useState<any>(null);
+  const [currentTick, setCurrentTick] = useState(0);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [snapshots, setSnapshots] = useState<any[]>([]);
   const [chaosEvents, setChaosEvents] = useState<any[]>([]);
   const [killedNodes, setKilledNodes] = useState<Set<string>>(new Set());
+  const [degradedNodes, setDegradedNodes] = useState<Set<string>>(new Set());
+  const terminalEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const [peerCursors, setPeerCursors] = useState<Map<string, {x:number,y:number}>>(new Map());
   const [libraryItems, setLibraryItems] = useState<any[]>([]);
@@ -136,6 +141,49 @@ export default function WorkspacePage() {
     authFetch('/api/projects/library-of-doom', { credentials: 'include' })
       .then(r => r.json()).then(setLibraryItems).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  const generateTickLog = (snapshot: any, tick: number): string | null => {
+    if (!snapshot) return null;
+    const metrics = snapshot.nodeMetrics || [];
+    const failed = metrics.filter((m: any) => m.state === 'FAILED' || m.isOverloaded);
+    const degraded = metrics.filter((m: any) => m.state === 'DEGRADED');
+
+    if (failed.length > 0) {
+      return `[ERROR][Tick ${tick}] ${failed.map((m: any) => m.nodeId).join(', ')} - queue overflow, requests refused`;
+    }
+    if (degraded.length > 0) {
+      return `[WARN][Tick ${tick}] ${degraded.map((m: any) => m.nodeId).join(', ')} - degraded, elevated latency`;
+    }
+    if (tick % 50 === 0) {
+      const totalReqs = metrics.reduce((sum: number, m: any) => sum + (m.requestsReceived || 0), 0);
+      return `[INFO][Tick ${tick}] System nominal - ${totalReqs} requests processed this window`;
+    }
+    return null;
+  };
+
+  useEffect(() => {
+    if (!simulationComplete || snapshots.length === 0) return;
+    setIsSimulating(true);
+    setCurrentTick(0);
+    let tick = 0;
+    const interval = setInterval(() => {
+      tick += 1;
+      setCurrentTick(tick);
+      const snapshot = snapshots[tick];
+      const tickLog = generateTickLog(snapshot, tick);
+      if (tickLog) setLogs(prev => [...prev, tickLog]);
+      if (tick >= snapshots.length - 1) {
+        clearInterval(interval);
+        setIsSimulating(false);
+        setLogs(prev => [...prev, `[SYSTEM] Simulation complete. ${snapshots.length} ticks analysed.`]);
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [simulationComplete, snapshots]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -232,17 +280,44 @@ export default function WorkspacePage() {
   };
 
   const handleKillNode = (nodeId: string) => {
-    const triggerTick = 50;
     setChaosEvents(prev => [...prev, {
       event_id: `kill-${nodeId}-${Date.now()}`,
       kind: 'KillNode',
       target_node: nodeId,
-      trigger_tick: triggerTick,
+      target_edge: null,
+      trigger_tick: 30,
       duration_ticks: null,
       intensity: 1.0,
+      partition_group_a: null,
+      partition_group_b: null,
+      random_target_pct: null,
     }]);
     setKilledNodes(prev => new Set([...prev, nodeId]));
-    setLogs(prev => [...prev, `[CHAOS] Node '${nodeId}' scheduled for termination at tick ${triggerTick}`]);
+    setLogs(prev => [...prev, `[CHAOS] Node '${nodeId}' scheduled for kill at tick 30`]);
+  };
+
+  const handleDegradeNode = (nodeId: string) => {
+    setChaosEvents(prev => [...prev, {
+      event_id: `degrade-${nodeId}-${Date.now()}`,
+      kind: 'DegradeNode',
+      target_node: nodeId,
+      target_edge: null,
+      trigger_tick: 20,
+      duration_ticks: 200,
+      intensity: 0.5,
+      partition_group_a: null,
+      partition_group_b: null,
+      random_target_pct: null,
+    }]);
+    setDegradedNodes(prev => new Set([...prev, nodeId]));
+    setLogs(prev => [...prev, `[CHAOS] Node '${nodeId}' will be degraded from tick 20`]);
+  };
+
+  const handleResetChaos = () => {
+    setChaosEvents([]);
+    setKilledNodes(new Set());
+    setDegradedNodes(new Set());
+    setLogs(prev => [...prev, '[CHAOS] All chaos events cleared.']);
   };
 
   const handleDeployTest = async () => {
@@ -255,6 +330,9 @@ export default function WorkspacePage() {
     setMode('sim');
     setTerminalExpanded(true);
     setSimulationComplete(false);
+    setIsSimulating(false);
+    setCurrentTick(0);
+    setSnapshots([]);
     setLogs(['[SYSTEM] Initializing simulation engine...']);
     try {
       const seed = Date.now() % 0xFFFFFFFF;
@@ -265,28 +343,17 @@ export default function WorkspacePage() {
       });
       if (!response.ok) throw new Error(`Simulation failed: ${response.statusText}`);
       const result = await response.json();
-      const realLogs = [
+      setSnapshots(result.snapshots || []);
+      setLogs(prev => [
+        ...prev,
         '[SYSTEM] Simulation engine initialized.',
         `[INFO] Universe Seed: ${result.universeSeed}`,
         `[HASH] Graph hash: ${result.graphHash?.slice(0, 16)}...`,
         `[INFO] Processing ${result.totalRequests?.toLocaleString()} requests...`,
-        result.status?.includes('FAIL')
-          ? `[ERROR] System cascade detected at tick ${result.collapseTime}`
-          : '[INFO] System remained stable throughout simulation.',
-        `[RESULT] Grade: ${result.grade}`,
-        `[RESULT] Error rate: ${((result.totalFailures / Math.max(result.totalRequests, 1)) * 100).toFixed(2)}%`,
-        `[RESULT] Peak latency: ${result.peakLatency}ms`,
-        '[INFO] Simulation complete.',
-      ];
-      setLogs([]);
-      realLogs.forEach((msg, i) => {
-        setTimeout(() => {
-          setLogs(prev => [...prev, msg]);
-          if (i === realLogs.length - 1) setTimeout(() => setSimulationComplete(true), 300);
-        }, i * 350);
-      });
+      ]);
       setSimulationResult({ ...result, groqReview: result.groqReview || '' });
       setEdges(eds => eds.map(e => ({ ...e, animated: true })));
+      setSimulationComplete(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       setLogs(prev => [...prev, `[ERROR] ${msg}`]);
@@ -546,6 +613,10 @@ export default function WorkspacePage() {
             onDrop={onDrop}
             onDragOver={onDragOver}
             killedNodes={killedNodes}
+            degradedNodes={degradedNodes}
+            simulationSnapshots={snapshots}
+            currentTick={currentTick}
+            isSimulating={isSimulating}
           />
 
           {/* Canvas Labels / Overlays */}
@@ -608,12 +679,33 @@ export default function WorkspacePage() {
                     )))}
                  </div>
 
-                 <button
-                   onClick={() => selectedNode && handleKillNode(selectedNode.id)}
-                   className="w-full mt-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-widest hover:bg-red-500/20 transition-all"
-                 >
-                   {killedNodes.has(selectedNode?.id || '') ? 'Scheduled for Kill' : 'Kill This Node'}
-                 </button>
+                 <div className="space-y-3 mt-6">
+                   <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">
+                     Chaos Controls
+                   </div>
+                   <button
+                     onClick={() => selectedNode && handleKillNode(selectedNode.id)}
+                     disabled={killedNodes.has(selectedNode?.id || '')}
+                     className="w-full py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-widest hover:bg-red-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                   >
+                     {killedNodes.has(selectedNode?.id || '') ? '⬛ Kill Scheduled' : '☠ Kill Node'}
+                   </button>
+                   <button
+                     onClick={() => selectedNode && handleDegradeNode(selectedNode.id)}
+                     disabled={degradedNodes.has(selectedNode?.id || '')}
+                     className="w-full py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold text-xs uppercase tracking-widest hover:bg-amber-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                   >
+                     {degradedNodes.has(selectedNode?.id || '') ? '⚠ Degrade Scheduled' : '⚡ Degrade Node'}
+                   </button>
+                   {(chaosEvents.length > 0) && (
+                     <button
+                       onClick={handleResetChaos}
+                       className="w-full py-2 rounded-xl border border-white/10 text-zinc-500 font-bold text-xs uppercase tracking-widest hover:text-white hover:border-white/20 transition-all"
+                     >
+                       Reset All Chaos ({chaosEvents.length})
+                     </button>
+                   )}
+                 </div>
               </div>
             </motion.aside>
           )}
@@ -634,6 +726,11 @@ export default function WorkspacePage() {
              <Terminal size={16} className="text-blue-500" />
              <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500 group-hover:text-blue-400 transition-colors">Simulation Runtime Log</span>
              {logs.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]" />}
+             {isSimulating && (
+               <span className="text-[9px] font-mono text-blue-400 tracking-widest">
+                 TICK {currentTick}/{snapshots.length}
+               </span>
+             )}
           </div>
           <div className="text-zinc-600">
              {terminalExpanded ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
@@ -647,12 +744,20 @@ export default function WorkspacePage() {
                 key={i}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                className={`mb-2 ${log.includes('[WARN]') ? 'text-blue-400' : log.includes('GRADE') ? 'text-white font-bold' : 'text-zinc-600'}`}
+                className={`mb-2 font-mono text-xs ${
+                  log.includes('[ERROR]') ? 'text-red-400' :
+                  log.includes('[WARN]')  ? 'text-amber-400' :
+                  log.includes('[CHAOS]') ? 'text-purple-400' :
+                  log.includes('[RESULT]')? 'text-blue-300 font-bold' :
+                  log.includes('[SYSTEM]')? 'text-white' :
+                  'text-zinc-500'
+                }`}
               >
                 <span className="text-zinc-800 mr-4 select-none">[{i+1}]</span>
                 {log}
               </motion.div>
             ))}
+            <div ref={terminalEndRef} />
             
             {logs.length > 0 && !simulationComplete && (
               <motion.div
