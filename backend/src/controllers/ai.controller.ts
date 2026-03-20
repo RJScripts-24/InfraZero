@@ -47,12 +47,8 @@ export const generateArchitecture = async (
         // This delegates the actual API call and JSON parsing to the service layer
         const generatedGraph = await generateArchitectureFromPrompt(prompt);
 
-        // 3. Return the payload to the React frontend
-        res.status(200).json({
-            success: true,
-            data: generatedGraph, // Contains the perfectly typed Nodes and Edges
-            message: 'Architecture generated successfully.',
-        });
+        // 3. Return payload aligned with frontend API contract
+        res.status(200).json(generatedGraph);
 
     } catch (error) {
         logger.error(`[AI Generation Error] ${error instanceof Error ? error.message : String(error)}`);

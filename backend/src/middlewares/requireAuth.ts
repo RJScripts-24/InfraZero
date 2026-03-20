@@ -1,11 +1,12 @@
 // backend/src/middlewares/requireAuth.ts
 import { Request, Response, NextFunction } from 'express';
-import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { verifyAppToken } from '../services/authToken.service';
+import { AuthenticatedRequest } from '../types/request';
 
 /**
  * Authentication Middleware
- * Protects routes by requiring a valid Supabase JWT in the Authorization header.
+ * Protects routes by requiring a valid app token in the Authorization header.
  */
 export const requireAuth = async (
     req: Request,
@@ -26,11 +27,10 @@ export const requireAuth = async (
 
         const token = authHeader.split(' ')[1];
 
-        // 2. Ask Supabase to verify the token and return the user
-        const { data: { user }, error } = await supabase.auth.getUser(token);
-
-        if (error || !user) {
-            logger.warn(`[Auth Blocked] Invalid token attempt. Reason: ${error?.message}`);
+        // 2. Verify app-issued session tokens for guest and provider shortcut auth flows.
+        const appUser = verifyAppToken(token);
+        if (!appUser) {
+            logger.warn('[Auth Blocked] Invalid token attempt.');
             res.status(401).json({
                 success: false,
                 error: 'Unauthorized: Invalid or expired token.'
@@ -38,12 +38,9 @@ export const requireAuth = async (
             return;
         }
 
-        // 3. Attach the authenticated user to the request object 
-        // so your controllers (like ai.controller.ts) know exactly who is making the request.
-        // (Using 'as any' here for quick integration, though extending Express.Request in types is best practice)
-        (req as any).user = user;
+        (req as AuthenticatedRequest).authUser = appUser;
 
-        // 4. Token is valid, proceed to the next middleware/controller
+        // 3. Token is valid, proceed to the next middleware/controller
         next();
 
     } catch (error) {

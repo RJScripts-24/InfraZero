@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+use crate::models::output::TelemetryRow;
+
 /// Logging severity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -86,6 +88,83 @@ fn wasm_console_log(level: LogLevel, line: &str) {
         LogLevel::Error => console_error(line),
         LogLevel::Warn => console_warn(line),
         LogLevel::Info => console_log(line),
+    }
+}
+
+pub struct TelemetryLogger {
+    pub rows: Vec<TelemetryRow>,
+    pub run_id: String,
+}
+
+impl TelemetryLogger {
+    pub fn new(seed: u64) -> Self {
+        Self {
+            rows: Vec::new(),
+            run_id: format!("run_{seed}"),
+        }
+    }
+
+    pub fn record(
+        &mut self,
+        tick: u64,
+        node_id: &str,
+        node_type: &str,
+        queue_depth: f64,
+        arrival_rate: f64,
+        processing_rate: f64,
+        mean_latency_ms: f64,
+        node_state: &str,
+    ) {
+        let utilisation = if processing_rate <= 0.0 {
+            if arrival_rate > 0.0 { 1.0 } else { 0.0 }
+        } else {
+            (arrival_rate / processing_rate).clamp(0.0, 1.0)
+        };
+
+        self.rows.push(TelemetryRow {
+            run_id: self.run_id.clone(),
+            tick,
+            node_id: node_id.to_string(),
+            node_type: node_type.to_string(),
+            queue_depth,
+            arrival_rate,
+            processing_rate,
+            utilisation,
+            mean_latency_ms,
+            node_state: node_state.to_string(),
+            cascade_label: false,
+            ticks_to_failure: None,
+        });
+    }
+
+    pub fn finalise(&mut self) {
+        for idx in 0..self.rows.len() {
+            let current_tick = self.rows[idx].tick;
+            let node_id = self.rows[idx].node_id.clone();
+            let mut same_node_seen = 0_u64;
+
+            for future_idx in (idx + 1)..self.rows.len() {
+                let future_node_id = self.rows[future_idx].node_id.clone();
+                if future_node_id != node_id {
+                    continue;
+                }
+
+                same_node_seen += 1;
+
+                let future_failed = self.rows[future_idx].node_state == "FAILED";
+                let future_tick = self.rows[future_idx].tick;
+
+                if future_failed {
+                    self.rows[idx].cascade_label = true;
+                    self.rows[idx].ticks_to_failure = Some(future_tick.saturating_sub(current_tick));
+                    break;
+                }
+
+                if same_node_seen >= 30 {
+                    break;
+                }
+            }
+        }
     }
 }
 

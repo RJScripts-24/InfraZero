@@ -1,5 +1,5 @@
 // backend/src/services/db.service.ts
-import { supabase } from '../config/supabase';
+import { dbPool } from '../config/database';
 import { logger } from '../utils/logger';
 
 export interface UserData {
@@ -10,26 +10,24 @@ export interface UserData {
 }
 
 /**
- * Upserts a user into the Supabase database.
+ * Upserts a user into the Postgres database.
  * Called by the authentication webhook when a user signs up or updates their profile.
  */
 export const syncUserToDatabase = async (userData: UserData): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('users')
-      .upsert({
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        avatar_url: userData.avatar_url,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'id' // If the user ID already exists, update their record
-      });
-
-    if (error) {
-      throw new Error(`Supabase Upsert Error: ${error.message}`);
-    }
+    await dbPool.query(
+      `
+        INSERT INTO users (id, email, name, avatar_url, updated_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (id)
+        DO UPDATE SET
+          email = EXCLUDED.email,
+          name = EXCLUDED.name,
+          avatar_url = EXCLUDED.avatar_url,
+          updated_at = NOW()
+      `,
+      [userData.id, userData.email ?? null, userData.name ?? null, userData.avatar_url ?? null]
+    );
   } catch (error) {
     logger.error(`[DB Service] Failed to sync user ${userData.id}: ${error instanceof Error ? error.message : String(error)}`);
     throw error; // Re-throw so the webhook controller can catch it and return a 500
@@ -42,14 +40,7 @@ export const syncUserToDatabase = async (userData: UserData): Promise<void> => {
  */
 export const deleteUserFromDatabase = async (userId: string): Promise<void> => {
   try {
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
-
-    if (error) {
-      throw new Error(`Supabase Delete Error: ${error.message}`);
-    }
+    await dbPool.query('DELETE FROM users WHERE id = $1', [userId]);
   } catch (error) {
     logger.error(`[DB Service] Failed to delete user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
     throw error;

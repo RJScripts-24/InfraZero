@@ -12,6 +12,9 @@ import { logger } from './utils/logger';
 import healthRoutes from './routes/health.routes';
 import aiRoutes from './routes/ai.routes';
 import webhookRoutes from './routes/webhooks.routes';
+import authRoutes from './routes/auth.routes';
+import projectsRoutes from './routes/projects.routes';
+import simulationsRoutes from './routes/simulations.routes';
 
 // Middlewares & Sockets
 import { errorHandler } from './middlewares/errorHandler';
@@ -51,6 +54,16 @@ app.use(express.urlencoded({ extended: true }));
  */
 app.use('/api/health', healthRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectsRoutes);
+app.use('/api/simulations', simulationsRoutes);
+
+// Contract-first v1 routes (preferred by frontend API contract)
+app.use('/v1/health', healthRoutes);
+app.use('/v1/auth', authRoutes);
+app.use('/v1/projects', projectsRoutes);
+app.use('/v1/ai', aiRoutes);
+app.use('/v1/simulations', simulationsRoutes);
 
 /**
  * 5. Global Error Handling

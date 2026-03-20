@@ -61,4 +61,21 @@ pub struct SimulationOutput {
     pub grade: GradeResult,
     pub cost: CostEstimate,
     pub root_cause: RootCauseReport,
+    pub telemetry: Vec<TelemetryRow>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct TelemetryRow {
+    pub run_id: String,
+    pub tick: u64,
+    pub node_id: String,
+    pub node_type: String,
+    pub queue_depth: f64,
+    pub arrival_rate: f64,
+    pub processing_rate: f64,
+    pub utilisation: f64,
+    pub mean_latency_ms: f64,
+    pub node_state: String,
+    pub cascade_label: bool,
+    pub ticks_to_failure: Option<u64>,
 }

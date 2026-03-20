@@ -11,9 +11,14 @@ description = "Deterministic WebAssembly simulation engine for InfraZero"
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+default = []
+console_error_panic_hook = ["dep:console_error_panic_hook"]
+
 [dependencies]
 # The bridge between Rust and JavaScript
 wasm-bindgen = "0.2.87"
+console_error_panic_hook = { version = "0.1.7", optional = true }
 
 # Serialization frameworks for safely passing JSON graphs to Rust
 serde = { version = "1.0", features = ["derive"] }
@@ -23,6 +28,9 @@ serde_json = "1.0"
 # Deterministic utilities for the physics engine
 rand = "0.8.5"
 sha2 = "0.10.8"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 # This block tells the wasm-pack build tool to run `wasm-opt -O3`.
 # It performs a final, extreme optimization pass over the compiled WASM 

@@ -13,9 +13,9 @@ interface EnvConfig {
     PORT: number;
     CORS_ORIGIN: string;
     GROQ_API_KEY: string;
-    SUPABASE_URL: string;
-    SUPABASE_SERVICE_ROLE_KEY: string;
-    WEBHOOK_SECRET: string; // Used to verify Supabase/Clerk auth webhooks
+    DATABASE_URL: string;
+    DATABASE_SSL: boolean;
+    WEBHOOK_SECRET: string; // Used to verify auth webhooks
 }
 
 /**
@@ -26,8 +26,7 @@ const validateEnv = (): EnvConfig => {
     // Array of keys that MUST be present for the app to function
     const requiredVars = [
         'GROQ_API_KEY',
-        'SUPABASE_URL',
-        'SUPABASE_SERVICE_ROLE_KEY',
+        'DATABASE_URL',
         'WEBHOOK_SECRET'
     ];
 
@@ -49,8 +48,8 @@ const validateEnv = (): EnvConfig => {
 
         // Required variables (the '!' tells TypeScript we guarantee these exist)
         GROQ_API_KEY: process.env.GROQ_API_KEY!,
-        SUPABASE_URL: process.env.SUPABASE_URL!,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        DATABASE_URL: process.env.DATABASE_URL!,
+        DATABASE_SSL: process.env.DATABASE_SSL !== 'false',
         WEBHOOK_SECRET: process.env.WEBHOOK_SECRET!,
     };
 };

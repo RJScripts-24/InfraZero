@@ -29,7 +29,7 @@ use crate::models::input::SimulationInput;
 use crate::models::output::{SimulationOutput, TickSnapshot, NodeMetrics, EdgeMetrics};
 use crate::utils::rng::SeededRng;
 use crate::utils::hasher::compute_stable_hash;
-use crate::utils::logger::{log_info, log_warn, log_error};
+use crate::utils::logger::{log_info, log_warn, log_error, TelemetryLogger};
 
 // =============================================================================
 // Configuration
@@ -91,6 +91,14 @@ struct LiveNodeState {
 }
 
 impl LiveNodeState {
+    fn mean_latency_ms(&self) -> f64 {
+        if self.latency_samples.is_empty() {
+            return 0.0;
+        }
+
+        self.latency_samples.iter().sum::<f64>() / self.latency_samples.len() as f64
+    }
+
     fn p50_latency(&self) -> f64 {
         if self.latency_samples.is_empty() {
             return 0.0;
@@ -296,7 +304,7 @@ impl SimulationEngine {
 
     /// Run the complete simulation and return the output.
     /// This is the primary entry point called by lib.rs WASM bindings.
-    pub fn run(mut self) -> SimulationOutput {
+    pub fn run(mut self, logger: &mut TelemetryLogger) -> SimulationOutput {
         log_info("[Engine] Starting simulation run...");
 
         let total_ticks = self.config.total_ticks;
@@ -330,6 +338,8 @@ impl SimulationEngine {
             }
 
             // ── 5. Check crash condition ─────────────────────────────────────
+            self.record_tick_telemetry(tick, logger);
+
             if self.detect_crash(tick) {
                 status = SimulationStatus::Crashed;
                 self.crash_tick = Some(tick);
@@ -430,6 +440,7 @@ impl SimulationEngine {
                 let next_node_id = &path[i + 1];
                 match self.find_edge(node_id, next_node_id) {
                     Some(edge) => {
+                        let edge = edge.clone();
                         let edge_id = edge.id.clone();
 
                         // Check full partition first.
@@ -451,11 +462,15 @@ impl SimulationEngine {
                         }
 
                         // Simulate network traversal.
+                        let edge_extra_latency = self.chaos.edge_extra_latency(&edge_id);
+                        let edge_extra_packet_loss = self.chaos.edge_extra_packet_loss(&edge_id);
+                        let edge_bandwidth_throttle = self.chaos.edge_bandwidth_throttle(&edge_id);
+
                         let result = self.network.simulate_traversal(
                             &edge,
-                            self.chaos.edge_extra_latency(&edge_id),
-                            self.chaos.edge_extra_packet_loss(&edge_id),
-                            self.chaos.edge_bandwidth_throttle(&edge_id),
+                            edge_extra_latency,
+                            edge_extra_packet_loss,
+                            edge_bandwidth_throttle,
                             &mut self.rng,
                         );
 
@@ -549,7 +564,7 @@ impl SimulationEngine {
         throughput_mult: f64,
         extra_latency_ms: f64,
         retry_multiplier: f64,
-        tick: u64,
+        _tick: u64,
     ) -> (f64, bool) {
         // Effective processing power after chaos degradation.
         let effective_power = (node.processing_power * throughput_mult).max(0.001);
@@ -674,6 +689,41 @@ impl SimulationEngine {
         self.consecutive_crash_ticks >= CRASH_CONSECUTIVE_TICKS
     }
 
+    fn record_tick_telemetry(&self, tick: u64, logger: &mut TelemetryLogger) {
+        for node in &self.nodes {
+            let Some(live) = self.node_live.get(&node.id) else {
+                continue;
+            };
+
+            logger.record(
+                tick,
+                &node.id,
+                node.node_type.as_deref().unwrap_or("unknown"),
+                live.queue_depth as f64,
+                live.requests_received as f64,
+                live.requests_succeeded as f64,
+                live.mean_latency_ms(),
+                self.telemetry_node_state(&node.id, live),
+            );
+        }
+    }
+
+    fn telemetry_node_state(&self, node_id: &NodeId, live: &LiveNodeState) -> &'static str {
+        if let Some(chaos_state) = self.chaos.node_states.get(node_id) {
+            return match chaos_state.state {
+                NodeState::Healthy => "HEALTHY",
+                NodeState::Degraded | NodeState::Restarting => "DEGRADED",
+                NodeState::Dead | NodeState::Partitioned => "FAILED",
+            };
+        }
+
+        if live.is_overloaded || live.requests_failed > 0 {
+            "DEGRADED"
+        } else {
+            "HEALTHY"
+        }
+    }
+
     // =========================================================================
     // Private: Snapshots
     // =========================================================================
@@ -733,7 +783,7 @@ impl SimulationEngine {
     // =========================================================================
 
     /// Assemble the final SimulationOutput after the tick loop ends.
-    fn build_output(mut self, status: SimulationStatus, total_ticks: u64) -> SimulationOutput {
+    fn build_output(self, status: SimulationStatus, total_ticks: u64) -> SimulationOutput {
         log_info("[Engine] Running post-simulation analysis...");
 
         let ticks_run = self.crash_tick.unwrap_or(total_ticks);
@@ -817,6 +867,7 @@ impl SimulationEngine {
             grade: grade_result,
             cost: cost_result,
             root_cause,
+            telemetry: Vec::new(),
         }
     }
 }
@@ -825,38 +876,47 @@ impl SimulationEngine {
 // WASM Entry Point
 // =============================================================================
 
-/// WASM-exposed function: run a full simulation from a JSON input string.
-/// Called by the React frontend's "Deploy & Test" button handler.
-#[wasm_bindgen]
-pub fn run_simulation(input_json: &str) -> String {
-    // Configure panic hook for better WASM error messages in the browser console.
+pub fn run_simulation_output(input_json: &str) -> Result<SimulationOutput, String> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
     log_info("[WASM] run_simulation() called.");
 
-    // Deserialize input.
     let input: SimulationInput = match serde_json::from_str(input_json) {
         Ok(i) => i,
         Err(e) => {
             let err = format!("{{\"error\": \"Failed to parse simulation input: {}\"}}", e);
             log_error(&err);
-            return err;
+            return Err(err);
         }
     };
 
-    // Build engine.
+    let seed = input.config.seed;
     let engine = match SimulationEngine::new(input) {
         Ok(e) => e,
         Err(e) => {
             let err = format!("{{\"error\": \"Engine init failed: {}\"}}", e);
             log_error(&err);
-            return err;
+            return Err(err);
         }
     };
 
-    // Run.
-    let output = engine.run();
+    let mut logger = TelemetryLogger::new(seed);
+    let mut output = engine.run(&mut logger);
+    logger.finalise();
+    output.telemetry = logger.rows;
+
+    Ok(output)
+}
+
+/// WASM-exposed function: run a full simulation from a JSON input string.
+/// Called by the React frontend's "Deploy & Test" button handler.
+#[wasm_bindgen]
+pub fn run_simulation(input_json: &str) -> String {
+    let output = match run_simulation_output(input_json) {
+        Ok(output) => output,
+        Err(err) => return err,
+    };
 
     // Serialize output to JSON for JS consumption.
     match serde_json::to_string(&output) {
@@ -907,6 +967,7 @@ mod tests {
     use crate::models::input::SimulationInput;
     use crate::graph::node::{Node, NodeState};
     use crate::graph::edge::Edge;
+    use crate::utils::logger::TelemetryLogger;
 
     fn make_simple_input() -> SimulationInput {
         let nodes = vec![
@@ -995,8 +1056,10 @@ mod tests {
     #[test]
     fn test_simulation_completes_without_chaos() {
         let input = make_simple_input();
+        let seed = input.config.seed;
         let engine = SimulationEngine::new(input).unwrap();
-        let output = engine.run();
+        let mut logger = TelemetryLogger::new(seed);
+        let output = engine.run(&mut logger);
         assert_eq!(output.status, SimulationStatus::Completed);
         assert!(output.ticks_run > 0);
         assert!(output.total_requests > 0);
@@ -1015,12 +1078,16 @@ mod tests {
     fn test_same_seed_produces_same_output() {
         let input_a = make_simple_input();
         let input_b = make_simple_input();
+        let seed_a = input_a.config.seed;
+        let seed_b = input_b.config.seed;
 
         let engine_a = SimulationEngine::new(input_a).unwrap();
         let engine_b = SimulationEngine::new(input_b).unwrap();
 
-        let out_a = engine_a.run();
-        let out_b = engine_b.run();
+        let mut logger_a = TelemetryLogger::new(seed_a);
+        let mut logger_b = TelemetryLogger::new(seed_b);
+        let out_a = engine_a.run(&mut logger_a);
+        let out_b = engine_b.run(&mut logger_b);
 
         assert_eq!(out_a.total_requests, out_b.total_requests);
         assert_eq!(out_a.total_failures, out_b.total_failures);
@@ -1045,12 +1112,16 @@ mod tests {
         }];
 
         let clean_input = make_simple_input();
+        let chaos_seed = input.config.seed;
+        let clean_seed = clean_input.config.seed;
 
         let engine_chaos = SimulationEngine::new(input).unwrap();
         let engine_clean = SimulationEngine::new(clean_input).unwrap();
 
-        let out_chaos = engine_chaos.run();
-        let out_clean = engine_clean.run();
+        let mut chaos_logger = TelemetryLogger::new(chaos_seed);
+        let mut clean_logger = TelemetryLogger::new(clean_seed);
+        let out_chaos = engine_chaos.run(&mut chaos_logger);
+        let out_clean = engine_clean.run(&mut clean_logger);
 
         assert!(
             out_chaos.total_failures >= out_clean.total_failures,
@@ -1065,9 +1136,11 @@ mod tests {
         input.nodes[1].failure_rate = 0.99;
         input.config.total_ticks = 500;
         input.config.baseline_rps = 200.0;
+        let seed = input.config.seed;
 
         let engine = SimulationEngine::new(input).unwrap();
-        let output = engine.run();
+        let mut logger = TelemetryLogger::new(seed);
+        let output = engine.run(&mut logger);
 
         // May crash or complete depending on exact RNG, but error rate should be high.
         assert!(
@@ -1079,8 +1152,10 @@ mod tests {
     #[test]
     fn test_snapshots_recorded_at_interval() {
         let input = make_simple_input();
+        let seed = input.config.seed;
         let engine = SimulationEngine::new(input).unwrap();
-        let output = engine.run();
+        let mut logger = TelemetryLogger::new(seed);
+        let output = engine.run(&mut logger);
 
         let expected_snapshots = (output.ticks_run / SNAPSHOT_INTERVAL) + 1;
         // Allow ±2 for crash-tick edge cases.

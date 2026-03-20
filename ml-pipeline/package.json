@@ -1,0 +1,12 @@
+{
+  "name": "infrazero-ml-pipeline",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "generate-dataset": "node collect/generate_dataset.js"
+  },
+  "dependencies": {
+    "csv-stringify": "^6.5.2"
+  }
+}
