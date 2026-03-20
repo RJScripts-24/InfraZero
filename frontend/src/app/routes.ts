@@ -4,6 +4,7 @@ import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import WorkspacePage from "./pages/WorkspacePage";
 import SettingsPage from "./pages/SettingsPage";
+import GitHubCallbackPage from "./pages/GitHubCallbackPage";
 
 export const router = createBrowserRouter([
   {
@@ -13,6 +14,10 @@ export const router = createBrowserRouter([
   {
     path: "/auth",
     Component: AuthPage,
+  },
+  {
+    path: "/auth/github/callback",
+    Component: GitHubCallbackPage,
   },
   {
     path: "/dashboard",

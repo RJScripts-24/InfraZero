@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect, useRef } from 'react';
-import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check, LayoutGrid, Users, BookMarked, Settings2, Cpu, Wifi, HardDrive, Zap } from 'lucide-react';
+import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check, LayoutGrid, Users, BookMarked, Settings2, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
 
 // ── Premium graph thumbnail variants ─────────────────────────────────
 // Per-variant stroke opacity multipliers — subtle blue variations
@@ -10,16 +11,6 @@ const VARIANT_STROKE_BRIGHT    = [0.68, 0.64, 0.72, 0.66];
 
 // Per-card dot grid opacity
 const DOT_GRID_OPACITIES = [0.86, 0.93, 0.77, 0.97, 0.81, 0.91];
-
-// Per-card surface gradient — sleek dark glassmorphism
-const CARD_BACKGROUNDS = [
-  'rgba(24, 24, 27, 0.4)',  // Zinc-900/40
-  'rgba(24, 24, 27, 0.45)', 
-  'rgba(24, 24, 27, 0.4)',
-  'rgba(24, 24, 27, 0.4)',
-  'rgba(24, 24, 27, 0.45)',
-  'rgba(24, 24, 27, 0.4)',
-];
 
 const GraphThumbnail = ({ variant, failed }: { variant: number; failed?: boolean }) => {
   const idx    = variant % VARIANT_STROKE_OPACITIES.length;
@@ -98,8 +89,21 @@ const GraphThumbnail = ({ variant, failed }: { variant: number; failed?: boolean
   );
 };
 
+type DashboardProject = {
+  id: number;
+  title: string;
+  status: string;
+  statusColor: string;
+  lastEdited: string;
+  isCollaborative: boolean;
+  grade?: string;
+  isDraft?: boolean;
+  isFailed?: boolean;
+};
+
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const currentUser = getUser();
   const [inviteLink, setInviteLink] = useState('');
   const [activeNav, setActiveNav] = useState('My Projects');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
@@ -117,8 +121,8 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Mock project data
-  const [projects, setProjects] = useState([
+  // Fallback local project data if backend is unavailable
+  const [projects, setProjects] = useState<DashboardProject[]>([
     {
       id: 1,
       title: 'Velocis',
@@ -174,6 +178,41 @@ export default function DashboardPage() {
       grade: 'B+'
     }
   ]);
+
+  useEffect(() => {
+    if (isTemporaryGuest()) {
+      return;
+    }
+
+    authFetch('/api/projects', { method: 'GET' })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Failed to fetch projects: ${res.status}`))))
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        const mapped: DashboardProject[] = data.map((project: any, index: number) => {
+          const parsedId = Number(project.id);
+          return {
+          id: Number.isFinite(parsedId) ? parsedId : index + 1,
+          title: project.title || 'Untitled Project',
+          status:
+            project.status === 'Draft'
+              ? 'Draft'
+              : project.status === 'Failure'
+              ? 'Simulation Failed'
+              : `Graded: ${project.grade || 'B'}`,
+          statusColor: project.statusColor || (project.status === 'Failure' ? '#EF4444' : project.status === 'Draft' ? '#A1A1AA' : '#3B82F6'),
+          lastEdited: project.lastEdited || 'Recently',
+          isCollaborative: Boolean(project.isCollaborative),
+          grade: project.grade || undefined,
+          isDraft: project.status === 'Draft',
+          isFailed: project.status === 'Failure',
+        };
+        });
+        setProjects(mapped);
+      })
+      .catch((err) => {
+        console.error('[Dashboard] Failed to load projects, showing fallback data.', err);
+      });
+  }, []);
 
   const handleShare = (e: React.MouseEvent, projectId: number, projectTitle: string) => {
     e.stopPropagation();
@@ -252,13 +291,13 @@ export default function DashboardPage() {
                     background: 'linear-gradient(135deg, #09090b 0%, #18181b 100%)',
                     border: '1px solid rgba(59,130,246,0.3)',
                   }}>
-                  <span style={{ color: '#60A5FA', fontSize: '15px', fontWeight: 600 }}>G</span>
+                  <span style={{ color: '#60A5FA', fontSize: '15px', fontWeight: 600 }}>{(currentUser?.name?.[0] || 'G').toUpperCase()}</span>
                 </div>
                 <div className="absolute bottom-0 right-0 rounded-full"
                   style={{ width: '10px', height: '10px', backgroundColor: '#3B82F6', border: '2px solid #09090B' }}/>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-[14px] font-medium truncate">Guest User</div>
+                <div className="text-white text-[14px] font-medium truncate">{currentUser?.name || 'Guest User'}</div>
                 <div className="text-zinc-500 text-[11px] font-mono tracking-wider uppercase">Research Tier</div>
               </div>
             </div>

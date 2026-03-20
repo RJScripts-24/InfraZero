@@ -8,6 +8,32 @@ import { logger } from '../utils/logger';
 // Initialize the Groq client using the validated environment variable
 const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 
+const GROQ_MODEL_CANDIDATES = [
+  process.env.GROQ_MODEL,
+  'llama-3.1-8b-instant',
+  'llama-3.3-70b-versatile',
+  'mixtral-8x7b-32768',
+].filter((model): model is string => Boolean(model && model.trim()));
+
+const createCompletionWithFallback = async (request: Omit<any, 'model'>): Promise<any> => {
+  const tried: string[] = [];
+  let lastError: unknown = null;
+
+  for (const model of GROQ_MODEL_CANDIDATES) {
+    try {
+      tried.push(model);
+      return await groq.chat.completions.create({ ...(request as any), model } as any);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[Groq Service] Model '${model}' failed: ${message}`);
+    }
+  }
+
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`All Groq models failed (${tried.join(', ')}): ${reason}`);
+};
+
 /**
  * Calls the Groq Llama 3 API to generate a distributed system architecture
  * based on the user's natural language prompt.
@@ -46,12 +72,11 @@ export const generateArchitectureFromPrompt = async (prompt: string): Promise<Gr
   `;
 
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createCompletionWithFallback({
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
       ],
-      model: 'llama3-8b-8192', // Fast and capable model for JSON generation
       temperature: 0.1, // Very low temperature prevents the LLM from hallucinating invalid node types
       response_format: { type: 'json_object' }, // Native JSON mode support
     });
@@ -75,4 +100,25 @@ export const generateArchitectureFromPrompt = async (prompt: string): Promise<Gr
     logger.error(`[Groq Service Error] Failed to generate architecture: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error('Failed to generate architecture from AI provider.');
   }
+};
+
+export const generateArchitectureReview = async (simulationResult: any): Promise<string> => {
+  const prompt = `You are a senior SRE reviewing a distributed system simulation.
+RESULT: Grade ${simulationResult.grade}, Status ${simulationResult.status}
+Requests: ${simulationResult.totalRequests}, Failed: ${simulationResult.totalFailures}
+Peak latency: ${simulationResult.peakLatency}ms
+Primary cause: ${simulationResult.rootCause?.primaryCause}
+
+Write a post-mortem with 3 sections:
+**What went wrong** (2 sentences)
+**Root cause** (name the specific failure pattern)
+**3 concrete fixes** (bullet points, specific architectural changes)
+Max 120 words. Be technical and specific.`;
+
+  const completion = await createCompletionWithFallback({
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.2,
+    max_tokens: 300,
+  });
+  return completion.choices[0]?.message?.content || '';
 };

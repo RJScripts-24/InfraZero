@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Share2,
@@ -26,6 +26,7 @@ import '@xyflow/react/dist/style.css';
 import { FlowCanvas } from '../components/FlowCanvas';
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
 import { ReportView } from '../components/ReportView';
+import { authFetch, isTemporaryGuest } from '../../lib/auth';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
@@ -61,6 +62,18 @@ const componentList = [
   { id: 'cdn',           name: 'CDN',            type: 'Edge Network' },
 ];
 
+const wsUrlFromEnv = (() => {
+  const explicit = import.meta.env.VITE_WS_URL as string | undefined;
+  if (explicit && explicit.trim()) {
+    return explicit;
+  }
+  const apiBase = (import.meta.env.VITE_API_URL as string | undefined) || '';
+  if (apiBase) {
+    return apiBase.replace(/^http/i, 'ws');
+  }
+  return 'ws://localhost:3001';
+})();
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
@@ -80,9 +93,49 @@ export default function WorkspacePage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [simulationComplete, setSimulationComplete] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [simulationResult, setSimulationResult] = useState<any>(null);
+  const [chaosEvents, setChaosEvents] = useState<any[]>([]);
+  const [killedNodes, setKilledNodes] = useState<Set<string>>(new Set());
+  const wsRef = useRef<WebSocket | null>(null);
+  const [peerCursors, setPeerCursors] = useState<Map<string, {x:number,y:number}>>(new Map());
+  const [libraryItems, setLibraryItems] = useState<any[]>([]);
+  const [showLibrary, setShowLibrary] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  const sendWsMessage = useCallback((payload: Record<string, unknown>) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(payload));
+  }, []);
+
+  useEffect(() => {
+    wsRef.current = new WebSocket(wsUrlFromEnv);
+    wsRef.current.onopen = () => sendWsMessage({
+      type: 'join_workspace', workspaceId: projectName, userId: `user-${Date.now()}`, userName: 'You'
+    });
+    wsRef.current.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'cursor_update') setPeerCursors(prev => new Map(prev).set(msg.userId, {x: msg.x, y: msg.y}));
+      if (msg.type === 'node_moved') setNodes(nds => nds.map(n => n.id === msg.nodeId ? {...n, position: {x: msg.x, y: msg.y}} : n));
+      if (msg.type === 'graph_updated') { setNodes(msg.nodes); setEdges(msg.edges); }
+    };
+
+    return () => {
+      wsRef.current?.close();
+      wsRef.current = null;
+    };
+  }, [projectName, sendWsMessage, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (isTemporaryGuest()) {
+      return;
+    }
+
+    authFetch('/api/projects/library-of-doom', { credentials: 'include' })
+      .then(r => r.json()).then(setLibraryItems).catch(console.error);
+  }, []);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -137,20 +190,40 @@ export default function WorkspacePage() {
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
+    if (isTemporaryGuest()) {
+      setLogs(prev => [...prev, '[GUEST] AI generation requires authenticated account.']);
+      setTerminalExpanded(true);
+      return;
+    }
+
+    if (!aiPrompt.trim()) return;
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
-      setNodes((nds) => [
-        ...nds,
-        {
-          id: `${Date.now()}`,
+    try {
+      const response = await authFetch('/api/ai/generate', {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ prompt: aiPrompt }),
+      });
+      if (!response.ok) throw new Error('AI generation failed');
+      const graph = await response.json();
+      if (graph.nodes?.length > 0) {
+        setNodes(graph.nodes.map((n: any) => ({
+          ...n,
           type: 'custom',
-          position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
-          data: { label: 'Redis Cache', type: 'Cache', isActive: false },
-        },
-      ]);
-    }, 2000);
+          data: { ...n.data, isActive: true },
+        })));
+      }
+      if (graph.edges?.length > 0) {
+        setEdges(graph.edges.map((e: any) => ({ ...edgeBase, ...e })));
+      }
+      sendWsMessage({ type: 'graph_replace', workspaceId: projectName, nodes: graph.nodes, edges: graph.edges });
+      setAiPrompt('');
+    } catch (err) {
+      console.error('[AI Generate Error]', err);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleShareClick = () => {
@@ -158,33 +231,67 @@ export default function WorkspacePage() {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  const handleDeployTest = () => {
+  const handleKillNode = (nodeId: string) => {
+    const triggerTick = 50;
+    setChaosEvents(prev => [...prev, {
+      event_id: `kill-${nodeId}-${Date.now()}`,
+      kind: 'KillNode',
+      target_node: nodeId,
+      trigger_tick: triggerTick,
+      duration_ticks: null,
+      intensity: 1.0,
+    }]);
+    setKilledNodes(prev => new Set([...prev, nodeId]));
+    setLogs(prev => [...prev, `[CHAOS] Node '${nodeId}' scheduled for termination at tick ${triggerTick}`]);
+  };
+
+  const handleDeployTest = async () => {
+    if (isTemporaryGuest()) {
+      setLogs(prev => [...prev, '[GUEST] Simulation run requires authenticated account.']);
+      setTerminalExpanded(true);
+      return;
+    }
+
     setMode('sim');
     setTerminalExpanded(true);
     setSimulationComplete(false);
-    const messages = [
-      '[SYSTEM] Initializing Deterministic Vector...',
-      '[INFO] Universe Seed: 783492',
-      '[SYNC] Brand-Blue Consistency Verified',
-      '[INFO] Deploying 10,000 ephemeral workers...',
-      "[WARN] Gateway latency spike detected at [323ms]",
-      '[INFO] Applying backpressure algorithms...',
-      '[INFO] Topology stabilized at 99.98% uptime',
-      '[INFO] Simulation complete.',
-      'GRADE: B+',
-      'COST EFFICIENCY: 0.72',
-      'RECOMMENDATION: Scale horizontal workers',
-    ];
-    setLogs([]);
-    messages.forEach((msg, i) => {
-      setTimeout(() => {
-        setLogs((p) => [...p, msg]);
-        if (i === messages.length - 1) {
-          setTimeout(() => setSimulationComplete(true), 500);
-        }
-      }, i * 400);
-    });
-    setEdges((eds) => eds.map((edge) => ({ ...edge, animated: true })));
+    setLogs(['[SYSTEM] Initializing simulation engine...']);
+    try {
+      const seed = Date.now() % 0xFFFFFFFF;
+      const response = await authFetch('/api/simulations/run', {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ nodes, edges, seed, chaosEnabled: chaosEvents.length > 0, chaosEvents }),
+      });
+      if (!response.ok) throw new Error(`Simulation failed: ${response.statusText}`);
+      const result = await response.json();
+      const realLogs = [
+        '[SYSTEM] Simulation engine initialized.',
+        `[INFO] Universe Seed: ${result.universeSeed}`,
+        `[HASH] Graph hash: ${result.graphHash?.slice(0, 16)}...`,
+        `[INFO] Processing ${result.totalRequests?.toLocaleString()} requests...`,
+        result.status?.includes('FAIL')
+          ? `[ERROR] System cascade detected at tick ${result.collapseTime}`
+          : '[INFO] System remained stable throughout simulation.',
+        `[RESULT] Grade: ${result.grade}`,
+        `[RESULT] Error rate: ${((result.totalFailures / Math.max(result.totalRequests, 1)) * 100).toFixed(2)}%`,
+        `[RESULT] Peak latency: ${result.peakLatency}ms`,
+        '[INFO] Simulation complete.',
+      ];
+      setLogs([]);
+      realLogs.forEach((msg, i) => {
+        setTimeout(() => {
+          setLogs(prev => [...prev, msg]);
+          if (i === realLogs.length - 1) setTimeout(() => setSimulationComplete(true), 300);
+        }, i * 350);
+      });
+      setSimulationResult({ ...result, groqReview: result.groqReview || '' });
+      setEdges(eds => eds.map(e => ({ ...e, animated: true })));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setLogs(prev => [...prev, `[ERROR] ${msg}`]);
+      setSimulationComplete(true);
+    }
   };
 
   const handleImportDiagram = (importedNodes: any[], importedEdges: any[]) => {
@@ -374,6 +481,26 @@ export default function WorkspacePage() {
                         <FileImage size={18} />
                         IMPORT VISION DATA
                       </button>
+
+                      <button onClick={() => setShowLibrary(!showLibrary)}
+                        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl border border-red-500/20 bg-red-500/5 text-red-400 font-bold text-sm hover:bg-red-500/10 transition-all mt-3">
+                        LIBRARY OF DOOM
+                      </button>
+
+                      {showLibrary && libraryItems.map(item => (
+                        <div key={item.id} onClick={() => {
+                          if (item.graph_json) {
+                            const g = JSON.parse(item.graph_json);
+                            setNodes(g.nodes || []); setEdges(g.edges || []);
+                            setShowLibrary(false);
+                            setLogs([`[DOOM] Loaded: ${item.name}`, '[WARN] This architecture contains known failure patterns.']);
+                            setTerminalExpanded(true);
+                          }
+                        }} className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 cursor-pointer hover:bg-red-500/10 transition-all mt-2">
+                          <div className="text-red-400 font-bold text-sm">{item.name}</div>
+                          <div className="text-zinc-600 text-xs mt-1">{item.description}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : (
@@ -384,7 +511,7 @@ export default function WorkspacePage() {
                         whileHover={{ x: 4, scale: 1.02 }}
                         className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 cursor-grab active:cursor-grabbing hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
                         draggable
-                        onDragStart={(e) => onDragStart(e, component)}
+                        onDragStartCapture={(e) => onDragStart(e, component)}
                       >
                          <div className="text-zinc-200 font-bold text-sm mb-1">{component.name}</div>
                          <div className="text-zinc-600 text-[10px] uppercase font-bold tracking-widest">{component.type}</div>
@@ -398,7 +525,7 @@ export default function WorkspacePage() {
         </AnimatePresence>
 
         {/* Canvas Area */}
-        <div className="flex-1 relative z-10" ref={reactFlowWrapper}>
+        <div className="flex-1 relative z-10" ref={reactFlowWrapper} onMouseMove={(e) => sendWsMessage({ type: 'cursor_move', workspaceId: projectName, userId: 'local', x: e.clientX, y: e.clientY })}>
           
           {/* Toggle Sidebar Button */}
           <button
@@ -418,6 +545,7 @@ export default function WorkspacePage() {
             onInit={setRfInstance}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            killedNodes={killedNodes}
           />
 
           {/* Canvas Labels / Overlays */}
@@ -445,8 +573,8 @@ export default function WorkspacePage() {
               </div>
 
               <div className="mb-10">
-                 <h3 className="text-white text-xl font-bold tracking-tight mb-2">{selectedNode.data.label}</h3>
-                 <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">{selectedNode.data.type}</p>
+                 <h3 className="text-white text-xl font-bold tracking-tight mb-2">{(selectedNode.data as { label?: string }).label ?? 'Untitled Node'}</h3>
+                 <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">{(selectedNode.data as { type?: string }).type ?? 'Unknown'}</p>
               </div>
 
               <div className="space-y-8">
@@ -479,6 +607,13 @@ export default function WorkspacePage() {
                        </div>
                     )))}
                  </div>
+
+                 <button
+                   onClick={() => selectedNode && handleKillNode(selectedNode.id)}
+                   className="w-full mt-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 font-bold text-xs uppercase tracking-widest hover:bg-red-500/20 transition-all"
+                 >
+                   {killedNodes.has(selectedNode?.id || '') ? 'Scheduled for Kill' : 'Kill This Node'}
+                 </button>
               </div>
             </motion.aside>
           )}
@@ -561,7 +696,26 @@ export default function WorkspacePage() {
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
         projectName={projectName}
-        reportData={{
+        reportData={simulationResult ? {
+          simulationId: simulationResult.universeSeed || 'N/A',
+          universeSeed: simulationResult.universeSeed || 'N/A',
+          stableHash: simulationResult.graphHash || 'N/A',
+          grade: simulationResult.grade || 'F',
+          gradeColor: simulationResult.grade === 'A' ? '#10b981' : simulationResult.grade?.startsWith('B') ? '#3B82F6' : '#ef4444',
+          status: simulationResult.status || 'UNKNOWN',
+          statusColor: simulationResult.status?.includes('PASS') ? '#10b981' : '#ef4444',
+          totalRequests: simulationResult.totalRequests || 0,
+          failedRequests: simulationResult.totalFailures || 0,
+          peakLatency: simulationResult.peakLatency || 0,
+          collapseTime: simulationResult.collapseTime || '—',
+          rootCause: {
+            summary: simulationResult.rootCause?.summary || 'Simulation completed.',
+            details: simulationResult.rootCause?.details || [],
+          },
+          recommendations: simulationResult.recommendations || [],
+          latencyData: simulationResult.latencyData || [],
+          groqReview: simulationResult.groqReview || '',
+        } : {
           simulationId: '847293',
           universeSeed: '783492',
           stableHash: 'a7c4f9d2e8b3f1a588b2c45...',
@@ -573,38 +727,10 @@ export default function WorkspacePage() {
           failedRequests: 142,
           peakLatency: 323,
           collapseTime: '—',
-          rootCause: {
-            summary: 'The architecture maintained high availability through localized backpressure. A minor latency spike was detected at the Gateway layer, likely due to peak concurrent TLS handshakes, but the system remained functionally deterministic.',
-            details: [
-              { label: 'Max Concurrency', value: '1,200 req/sec' },
-              { label: 'Gateway Latency', value: '323ms (Peak)' },
-              { label: 'Thread Safety', value: 'Verified' },
-              { label: 'Memory Pressure', value: 'Nominal' },
-            ],
-          },
-          recommendations: [
-            'Introduce horizontal scaling for Load Balancer nodes.',
-            'Implement circuit breaker pattern at API gateway layer.',
-            'Configure Redis caching for hot path session storage.',
-            'Adjust ephemeral worker heap size for stability.',
-          ],
-          latencyData: [
-            { time: 0, latency: 45 },
-            { time: 10, latency: 52 },
-            { time: 20, latency: 68 },
-            { time: 30, latency: 95 },
-            { time: 40, latency: 120 },
-            { time: 50, latency: 185 },
-            { time: 60, latency: 280 },
-            { time: 70, latency: 323 },
-            { time: 80, latency: 210 },
-            { time: 90, latency: 140 },
-            { time: 100, latency: 85 },
-            { time: 120, latency: 62 },
-            { time: 140, latency: 55 },
-            { time: 160, latency: 48 },
-            { time: 180, latency: 45 },
-          ],
+          rootCause: { summary: 'Run a simulation to see results.', details: [] },
+          recommendations: ['Run a simulation to see real recommendations.'],
+          latencyData: [],
+          groqReview: '',
         }}
       />
       
@@ -623,6 +749,13 @@ export default function WorkspacePage() {
           background: rgba(59, 130, 246, 0.2);
         }
       `}</style>
+
+      {Array.from(peerCursors.entries()).map(([uid, cursor]) => (
+        <div key={uid} className="pointer-events-none fixed z-50" style={{ left: cursor.x, top: cursor.y }}>
+          <div className="w-3 h-3 rounded-full bg-blue-400 shadow-lg" />
+          <span className="text-blue-400 text-xs font-mono ml-1">{uid}</span>
+        </div>
+      ))}
     </div>
   );
 }

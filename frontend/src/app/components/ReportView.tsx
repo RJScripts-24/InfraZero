@@ -24,6 +24,7 @@ interface ReportViewProps {
     };
     recommendations: string[];
     latencyData: Array<{ time: number; latency: number }>;
+      groqReview?: string;
   };
 }
 
@@ -255,6 +256,13 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                             </div>
                           ))}
                        </div>
+
+                                  {reportData.groqReview && (
+                                     <div className="mt-6 rounded-2xl border border-white/10 bg-black/40 p-4">
+                                        <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-2">Groq Post-Simulation Review</div>
+                                        <pre className="font-mono text-zinc-400 text-xs whitespace-pre-wrap leading-relaxed">{reportData.groqReview}</pre>
+                                     </div>
+                                  )}
                     </div>
                  </div>
 

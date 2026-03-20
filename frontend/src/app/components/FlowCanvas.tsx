@@ -66,6 +66,7 @@ const CustomNode = memo(({ data }: { data: any }) => {
 
   return (
     <div
+      className={data.isKilled ? 'ring-2 ring-red-500 opacity-50' : ''}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -154,6 +155,7 @@ interface FlowCanvasProps {
   onInit: (instance: any) => void;
   onDrop: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
+  killedNodes?: Set<string>;
 }
 
 export const FlowCanvas = memo(({
@@ -166,11 +168,20 @@ export const FlowCanvas = memo(({
   onInit,
   onDrop,
   onDragOver,
+  killedNodes,
 }: FlowCanvasProps) => {
+  const decoratedNodes = nodes.map((node) => ({
+    ...node,
+    data: {
+      ...(node.data || {}),
+      isKilled: killedNodes?.has(node.id) ?? false,
+    },
+  }));
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <ReactFlow
-        nodes={nodes}
+        nodes={decoratedNodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

@@ -1,7 +1,9 @@
 import path from 'path';
+import fs from 'fs';
 import { DEFAULT_EDGE_CONFIG, DEFAULT_NODE_CONFIG } from '../config/constants';
 import { CustomEdge, CustomNode } from '../types/graph';
 import { generateStableHash } from '../utils/stableHash';
+import { logger } from '../utils/logger';
 
 interface EngineModule {
   run_simulation: (inputJson: string) => string;
@@ -67,13 +69,43 @@ export interface EngineRunResult {
 }
 
 const tryLoadEngineModule = (): EngineModule | null => {
-  try {
-    const modulePath = path.resolve(__dirname, '../../../simulation-engine/pkg/simulation_engine.js');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    return require(modulePath) as EngineModule;
-  } catch {
-    return null;
+  const candidatePaths = [
+    path.resolve(__dirname, '../../../simulation-engine/pkg/infrazero_simulation_engine.js'),
+    path.resolve(__dirname, '../../../simulation-engine/pkg/simulation_engine.js'),
+  ];
+
+  const errors: string[] = [];
+
+  for (const modulePath of candidatePaths) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const loaded = require(modulePath) as any;
+
+      if (typeof loaded?.initSync === 'function') {
+        const wasmPath = modulePath.replace(/\.js$/, '_bg.wasm');
+        const wasmBytes = fs.readFileSync(wasmPath);
+        loaded.initSync({ module: wasmBytes });
+      }
+
+      const resolved = (loaded?.run_simulation ? loaded : loaded?.default) as EngineModule | undefined;
+      if (
+        resolved &&
+        typeof resolved.run_simulation === 'function' &&
+        typeof resolved.validate_graph === 'function' &&
+        typeof resolved.get_graph_hash === 'function'
+      ) {
+        logger.info(`[Simulation Engine] Loaded module: ${modulePath}`);
+        return resolved;
+      }
+      errors.push(`${modulePath}: missing required exports`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      errors.push(`${modulePath}: ${message}`);
+    }
   }
+
+  logger.error(`[Simulation Engine] Module load failure. Tried: ${errors.join(' | ')}`);
+  return null;
 };
 
 const parsePercentToFraction = (value: number | undefined, defaultPercent: number): number => {
@@ -182,7 +214,12 @@ const buildRootCauseDetails = (rootCause: EngineRootCause, totalFailures: number
   return details;
 };
 
-export const runSimulationWithEngine = (nodes: CustomNode[], edges: CustomEdge[], seed: number): EngineRunResult => {
+export const runSimulationWithEngine = (
+  nodes: CustomNode[],
+  edges: CustomEdge[],
+  seed: number,
+  options?: { chaosEnabled?: boolean; chaosEvents?: any[] },
+): EngineRunResult => {
   const engine = tryLoadEngineModule();
   if (!engine) {
     throw new Error('Simulation engine module is unavailable.');
@@ -193,13 +230,13 @@ export const runSimulationWithEngine = (nodes: CustomNode[], edges: CustomEdge[]
     edges: normalizeEdges(edges),
     config: {
       seed,
-      totalTicks: 1000,
-      trafficPattern: 'steady',
-      baselineRps: 900,
-      peakRpsMultiplier: 3,
-      chaosEnabled: false,
-      chaosEvents: [],
-      fullTrace: false,
+      total_ticks: 1000,
+      traffic_pattern: 'steady',
+      baseline_rps: 900,
+      peak_rps_multiplier: 3,
+      chaos_enabled: options?.chaosEnabled ?? false,
+      chaos_events: options?.chaosEvents ?? [],
+      full_trace: false,
     },
   };
 

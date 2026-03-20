@@ -16,6 +16,7 @@ export const setupSignalingServer = (server: HttpServer): void => {
 
   // Maps a topic (room ID) to a Set of connected WebSocket clients
   const topics = new Map<string, Set<WebSocket>>();
+  const rooms = new Map<string, Set<WebSocket>>();
 
   // Utility to send a JSON message safely
   const send = (conn: WebSocket, message: object) => {
@@ -30,6 +31,18 @@ export const setupSignalingServer = (server: HttpServer): void => {
   wss.on('connection', (conn: WebSocket) => {
     let isAlive = true;
     const subscribedTopics = new Set<string>();
+    const joinedWorkspaces = new Set<string>();
+    let connectionUserId = '';
+
+    const broadcastToRoom = (workspaceId: string, payload: object) => {
+      const members = rooms.get(workspaceId);
+      if (!members) return;
+      members.forEach((member) => {
+        if (member !== conn) {
+          send(member, payload);
+        }
+      });
+    };
 
     logger.info('[Signaling Server] New client connected');
 
@@ -98,6 +111,58 @@ export const setupSignalingServer = (server: HttpServer): void => {
               send(conn, { type: 'pong' });
               break;
 
+            case 'join_workspace':
+              if (typeof message.workspaceId === 'string' && message.workspaceId.trim()) {
+                const workspaceId = message.workspaceId;
+                let room = rooms.get(workspaceId);
+                if (!room) {
+                  room = new Set();
+                  rooms.set(workspaceId, room);
+                }
+                room.add(conn);
+                joinedWorkspaces.add(workspaceId);
+                connectionUserId = typeof message.userId === 'string' ? message.userId : connectionUserId;
+                broadcastToRoom(workspaceId, {
+                  type: 'user_joined',
+                  userId: message.userId,
+                  userName: message.userName,
+                });
+              }
+              break;
+
+            case 'cursor_move':
+              if (typeof message.workspaceId === 'string' && message.workspaceId.trim()) {
+                broadcastToRoom(message.workspaceId, {
+                  type: 'cursor_update',
+                  userId: message.userId,
+                  x: message.x,
+                  y: message.y,
+                });
+              }
+              break;
+
+            case 'node_move':
+              if (typeof message.workspaceId === 'string' && message.workspaceId.trim()) {
+                broadcastToRoom(message.workspaceId, {
+                  type: 'node_moved',
+                  userId: message.userId,
+                  nodeId: message.nodeId,
+                  x: message.x,
+                  y: message.y,
+                });
+              }
+              break;
+
+            case 'graph_replace':
+              if (typeof message.workspaceId === 'string' && message.workspaceId.trim()) {
+                broadcastToRoom(message.workspaceId, {
+                  type: 'graph_updated',
+                  nodes: message.nodes,
+                  edges: message.edges,
+                });
+              }
+              break;
+
             default:
               logger.warn(`[Signaling Server] Unknown message type: ${message.type}`);
               break;
@@ -110,6 +175,22 @@ export const setupSignalingServer = (server: HttpServer): void => {
 
     conn.on('close', () => {
       logger.info('[Signaling Server] Client disconnected');
+      joinedWorkspaces.forEach((workspaceId) => {
+        const room = rooms.get(workspaceId);
+        if (room) {
+          room.delete(conn);
+          if (connectionUserId) {
+            room.forEach((member) => {
+              send(member, { type: 'user_left', userId: connectionUserId });
+            });
+          }
+          if (room.size === 0) {
+            rooms.delete(workspaceId);
+          }
+        }
+      });
+      joinedWorkspaces.clear();
+
       subscribedTopics.forEach((topicName) => {
         const topic = topics.get(topicName);
         if (topic) {

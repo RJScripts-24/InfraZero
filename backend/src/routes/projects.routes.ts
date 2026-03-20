@@ -5,6 +5,7 @@ import {
   deleteProject,
   generateInviteLink,
   getProjectDetails,
+  getLibraryOfDoom,
   getSimulationReport,
   listProjects,
   runSimulation,
@@ -16,6 +17,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/', listProjects);
+router.get('/library-of-doom', getLibraryOfDoom);
 router.post('/', createProject);
 router.get('/:id', getProjectDetails);
 router.put('/:id', updateProject);

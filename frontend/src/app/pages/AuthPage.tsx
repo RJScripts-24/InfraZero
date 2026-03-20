@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { Github, UserCircle, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { authFetch, saveSession } from '../../lib/auth';
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -68,7 +69,11 @@ export default function AuthPage() {
                   gap: '12px',
                   fontSize: '16px'
                 }}
-                onClick={() => navigate('/dashboard')}
+                onClick={() => {
+                  const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
+                  const redirectUri = `${window.location.origin}/auth/github/callback`;
+                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user:email`;
+                }}
               >
                 {/* SVG Border Animation Effect */}
                 <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'1.5px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
@@ -90,6 +95,32 @@ export default function AuthPage() {
                   gap: '12px',
                   fontSize: '16px'
                 }}
+                onClick={() => {
+                  // @ts-ignore
+                  google.accounts.id.initialize({
+                    client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+                    callback: async (response: any) => {
+                      try {
+                        const res = await authFetch('/api/auth/google', {
+                          method: 'POST',
+                          body: JSON.stringify({ token: response.credential }),
+                        });
+                        if (!res.ok) {
+                          throw new Error(`Google login failed: ${res.status}`);
+                        }
+                        const data = await res.json();
+                        if (data.token) {
+                          saveSession(data.token, data.user);
+                          navigate('/dashboard');
+                        }
+                      } catch (err) {
+                        console.error('Google login failed', err);
+                      }
+                    },
+                  });
+                  // @ts-ignore
+                  google.accounts.id.prompt();
+                }}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M19.6 10.227c0-.709-.064-1.39-.182-2.045H10v3.868h5.382a4.6 4.6 0 01-1.996 3.018v2.51h3.232c1.891-1.742 2.982-4.305 2.982-7.35z" fill="#4285F4"/>
@@ -109,7 +140,16 @@ export default function AuthPage() {
               <motion.button
                 whileHover={{ cursor: 'pointer', color: '#FFFFFF', backgroundColor: 'rgba(59,130,246,0.1)' }}
                 className="w-full flex items-center justify-center gap-3 text-zinc-400 font-medium transition-colors p-4 rounded-2xl border border-transparent hover:border-blue-500/30"
-                onClick={() => navigate('/dashboard')}
+                onClick={async () => {
+                  const tempSessionId = `guest-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  saveSession(`iz1.${tempSessionId}`, {
+                    id: tempSessionId,
+                    name: 'Guest User',
+                    tier: 'temporary',
+                    isGuest: true,
+                  });
+                  navigate('/dashboard');
+                }}
                 style={{ fontSize: '15px' }}
               >
                 <UserCircle size={20} />

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import { CustomEdge, CustomNode } from '../types/graph';
 import { integrationStore } from '../services/integrationStore.service';
 import { AuthenticatedRequest } from '../types/request';
+import { dbPool } from '../config/database';
 
 const parseTitle = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -127,4 +128,16 @@ export const getSimulationReport = (req: Request, res: Response): void => {
   }
 
   res.status(200).json(report);
+};
+
+export const getLibraryOfDoom = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { rows } = await dbPool.query('SELECT * FROM library_of_doom ORDER BY created_at ASC');
+    const data = rows;
+    const error = null;
+    if (error) throw error;
+    res.status(200).json(data || []);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch Library of Doom.' });
+  }
 };
