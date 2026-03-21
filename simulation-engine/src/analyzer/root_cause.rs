@@ -83,6 +83,28 @@ impl RootCauseAnalyzer {
             recommendations.push("Add read replicas or failover for the data tier.".to_string());
         }
 
+        let mut type_counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        let mut indegree: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for node in nodes {
+            let t = node.node_type.as_deref().unwrap_or("unknown");
+            *type_counts.entry(t).or_insert(0) += 1;
+            indegree.entry(node.id.as_str()).or_insert(0);
+        }
+        for edge in _edges {
+            *indegree.entry(edge.target.as_str()).or_insert(0) += 1;
+        }
+
+        let has_spof = nodes.iter().any(|node| {
+            let t = node.node_type.as_deref().unwrap_or("unknown");
+            let type_count = *type_counts.get(t).unwrap_or(&0);
+            let in_deg = *indegree.get(node.id.as_str()).unwrap_or(&0);
+            type_count == 1 && in_deg > 2
+        });
+
+        if has_spof {
+            recommendations.push("Critical: Single point of failure detected at high-traffic nodes. Add replicas or implement active-active failover immediately.".to_string());
+        }
+
         if recommendations.is_empty() {
             recommendations.push("Run chaos scenarios with higher traffic to expose weak links.".to_string());
         }

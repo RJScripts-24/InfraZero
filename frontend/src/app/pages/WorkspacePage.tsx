@@ -26,16 +26,13 @@ import '@xyflow/react/dist/style.css';
 import { FlowCanvas } from '../components/FlowCanvas';
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
 import { ReportView } from '../components/ReportView';
-import { authFetch, isTemporaryGuest } from '../../lib/auth';
+import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
+import { initCollaboration, destroyCollaboration, setLocalUser, setLocalCursor } from '../../lib/collaboration';
+import * as Y from 'yjs';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
 
-const initialNodes: Node[] = [
-  { id: '1', type: 'custom', position: { x: 250, y: 100 }, data: { label: 'API Gateway',   type: 'Load Balancer', isActive: true } },
-  { id: '2', type: 'custom', position: { x: 100, y: 250 }, data: { label: 'Auth Service',  type: 'Node Service' } },
-  { id: '3', type: 'custom', position: { x: 400, y: 250 }, data: { label: 'API Service',   type: 'Node Service',  isActive: true } },
-  { id: '4', type: 'custom', position: { x: 250, y: 400 }, data: { label: 'PostgreSQL',    type: 'Database' } },
-];
+const initialNodes: Node[] = [];
 
 const edgeBase = {
   type: 'smoothstep',
@@ -44,12 +41,7 @@ const edgeBase = {
   markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
 };
 
-const initialEdges: Edge[] = [
-  { ...edgeBase, id: 'e1-2', source: '1', target: '2', sourceHandle: 'bottom', targetHandle: 'top' },
-  { ...edgeBase, id: 'e1-3', source: '1', target: '3', sourceHandle: 'bottom', targetHandle: 'top' },
-  { ...edgeBase, id: 'e2-4', source: '2', target: '4', sourceHandle: 'bottom', targetHandle: 'top' },
-  { ...edgeBase, id: 'e3-4', source: '3', target: '4', sourceHandle: 'bottom', targetHandle: 'top' },
-];
+const initialEdges: Edge[] = [];
 
 const componentList = [
   { id: 'load-balancer', name: 'Load Balancer',  type: 'Infrastructure' },
@@ -74,10 +66,100 @@ const wsUrlFromEnv = (() => {
   return 'ws://localhost:3001';
 })();
 
+const normalizeNodes = (input: any): Node[] => {
+  if (!Array.isArray(input)) return [];
+  const seenNodeIds = new Map<string, number>();
+  return input
+    .filter((n) => n && typeof n === 'object')
+    .map((n: any, idx: number) => {
+      const baseId = String(n.id ?? `node-${Date.now()}-${idx}`);
+      const dupCount = seenNodeIds.get(baseId) ?? 0;
+      seenNodeIds.set(baseId, dupCount + 1);
+      const uniqueId = dupCount === 0 ? baseId : `${baseId}-${dupCount}`;
+
+      return {
+        id: uniqueId,
+        type: 'custom',
+        position: {
+          x: Number(n.position?.x ?? n.x ?? idx * 200),
+          y: Number(n.position?.y ?? n.y ?? 120),
+        },
+        data: {
+          ...(n.data || {}),
+          label: n.data?.label || n.label || `Service ${idx + 1}`,
+          type: n.data?.type || n.type || 'Node Service',
+          isActive: true,
+        },
+      };
+    });
+};
+
+const normalizeEdges = (input: any): Edge[] => {
+  if (!Array.isArray(input)) return [];
+  const seenEdgeIds = new Map<string, number>();
+  const seenConnections = new Set<string>();
+
+  return input
+    .filter((e) => e && typeof e === 'object' && e.source != null && e.target != null)
+    .map((e: any, idx: number) => {
+      const source = String(e.source);
+      const target = String(e.target);
+      const sourceHandle = e.sourceHandle || 'bottom';
+      const targetHandle = e.targetHandle || 'top';
+
+      const baseId = String(e.id ?? `e-${source}-${target}-${idx}`);
+      const dupCount = seenEdgeIds.get(baseId) ?? 0;
+      seenEdgeIds.set(baseId, dupCount + 1);
+      const uniqueId = dupCount === 0 ? baseId : `${baseId}-${dupCount}`;
+
+      const signature = `${source}:${sourceHandle}->${target}:${targetHandle}`;
+      if (seenConnections.has(signature)) {
+        return null;
+      }
+      seenConnections.add(signature);
+
+      return {
+        ...edgeBase,
+        ...e,
+        id: uniqueId,
+        source,
+        target,
+        sourceHandle,
+        targetHandle,
+      } as Edge;
+    })
+    .filter((e): e is Edge => Boolean(e));
+};
+
+const edgeSignature = (edge: Edge): string => {
+  return `${String(edge.source)}:${edge.sourceHandle || 'bottom'}->${String(edge.target)}:${edge.targetHandle || 'top'}`;
+};
+
+const sanitizeGraph = (rawNodes: any, rawEdges: any): { nodes: Node[]; edges: Edge[] } => {
+  const normalizedNodes = normalizeNodes(rawNodes);
+  const nodeIdSet = new Set(normalizedNodes.map((n) => n.id));
+  const normalizedEdges = normalizeEdges(rawEdges).filter(
+    (e) => nodeIdSet.has(String(e.source)) && nodeIdSet.has(String(e.target)),
+  );
+
+  return {
+    nodes: normalizedNodes,
+    edges: normalizedEdges,
+  };
+};
+
+const extractGraphPayload = (payload: any): { nodes: Node[]; edges: Edge[] } => {
+  const candidate = payload?.graph || payload?.data || payload;
+  return sanitizeGraph(candidate?.nodes, candidate?.edges);
+};
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
-  const [projectName, setProjectName]     = useState('velocis-architecture-v3');
+  const [projectName, setProjectName]     = useState(() => {
+    const roomFromUrl = new URLSearchParams(window.location.search).get('room');
+    return roomFromUrl?.trim() || 'velocis-architecture-v3';
+  });
   const [isEditingName, setIsEditingName] = useState(false);
   const [mode, setMode]                   = useState<'edit' | 'sim'>('edit');
   const [activeTab, setActiveTab]         = useState<'ai' | 'components'>('ai');
@@ -92,6 +174,7 @@ export default function WorkspacePage() {
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [simulationComplete, setSimulationComplete] = useState(false);
+  const [simulationMode, setSimulationMode] = useState<'deterministic' | 'randomized'>('deterministic');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [simulationResult, setSimulationResult] = useState<any>(null);
   const [currentTick, setCurrentTick] = useState(0);
@@ -102,12 +185,26 @@ export default function WorkspacePage() {
   const [degradedNodes, setDegradedNodes] = useState<Set<string>>(new Set());
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const [peerCursors, setPeerCursors] = useState<Map<string, {x:number,y:number}>>(new Map());
+  const [peerCursors, setPeerCursors] = useState<Map<number, { x: number; y: number; name: string; color: string }>>(new Map());
+  const providerRef = useRef<any>(null);
+  const ydocRef = useRef<Y.Doc | null>(null);
+  const isApplyingRemoteNodesRef = useRef(false);
+  const isApplyingRemoteEdgesRef = useRef(false);
+  const nodesCountRef = useRef(initialNodes.length);
+  const edgesCountRef = useRef(initialEdges.length);
   const [libraryItems, setLibraryItems] = useState<any[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => {
+    nodesCountRef.current = nodes.length;
+  }, [nodes.length]);
+
+  useEffect(() => {
+    edgesCountRef.current = edges.length;
+  }, [edges.length]);
 
   const sendWsMessage = useCallback((payload: Record<string, unknown>) => {
     const ws = wsRef.current;
@@ -122,9 +219,25 @@ export default function WorkspacePage() {
     });
     wsRef.current.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      if (msg.type === 'cursor_update') setPeerCursors(prev => new Map(prev).set(msg.userId, {x: msg.x, y: msg.y}));
+      if (msg.type === 'cursor_update') {
+        setPeerCursors((prev) =>
+          new Map(prev).set(Number(msg.userId), {
+            x: msg.x,
+            y: msg.y,
+            name: msg.userName || 'Peer',
+            color: msg.color || '#3b82f6',
+          }),
+        );
+      }
       if (msg.type === 'node_moved') setNodes(nds => nds.map(n => n.id === msg.nodeId ? {...n, position: {x: msg.x, y: msg.y}} : n));
-      if (msg.type === 'graph_updated') { setNodes(msg.nodes); setEdges(msg.edges); }
+      if (msg.type === 'graph_updated') {
+        const syncedGraph = sanitizeGraph(msg.nodes, msg.edges);
+        if (syncedGraph.nodes.length === 0 && nodesCountRef.current > 0) {
+          return;
+        }
+        setNodes(syncedGraph.nodes);
+        setEdges(syncedGraph.edges);
+      }
     };
 
     return () => {
@@ -132,6 +245,105 @@ export default function WorkspacePage() {
       wsRef.current = null;
     };
   }, [projectName, sendWsMessage, setNodes, setEdges]);
+
+  useEffect(() => {
+    const { ydoc, provider } = initCollaboration(projectName);
+    ydocRef.current = ydoc;
+    providerRef.current = provider;
+
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+    setLocalUser(provider, {
+      name: getUser()?.name || 'Anonymous',
+      color: randomColor,
+    });
+
+    provider.awareness.on('change', () => {
+      const states = provider.awareness.getStates();
+      const cursors = new Map<number, { x: number; y: number; name: string; color: string }>();
+      states.forEach((state, clientId) => {
+        if (clientId !== provider.awareness.clientID && state.cursor && state.user) {
+          cursors.set(clientId, {
+            x: state.cursor.x,
+            y: state.cursor.y,
+            name: state.user.name,
+            color: state.user.color,
+          });
+        }
+      });
+      setPeerCursors(cursors);
+    });
+
+    const yNodes = ydoc.getArray('nodes');
+    const yEdges = ydoc.getArray('edges');
+
+    // Hydrate from shared doc if room already has state.
+    if (yNodes.length > 0) {
+      isApplyingRemoteNodesRef.current = true;
+      setNodes(normalizeNodes(yNodes.toArray()));
+    }
+    if (yEdges.length > 0) {
+      isApplyingRemoteEdgesRef.current = true;
+      setEdges(normalizeEdges(yEdges.toArray()));
+    }
+
+    yNodes.observe((_, transaction) => {
+      if (transaction.origin === 'local-nodes-sync') {
+        return;
+      }
+      const remoteNodes = yNodes.toArray();
+      if (remoteNodes.length === 0 && nodesCountRef.current > 0) {
+        return;
+      }
+      isApplyingRemoteNodesRef.current = true;
+      setNodes(normalizeNodes(remoteNodes));
+    });
+
+    yEdges.observe((_, transaction) => {
+      if (transaction.origin === 'local-edges-sync') {
+        return;
+      }
+      const remoteEdges = yEdges.toArray();
+      if (remoteEdges.length === 0 && edgesCountRef.current > 0) {
+        return;
+      }
+      isApplyingRemoteEdgesRef.current = true;
+      setEdges(normalizeEdges(remoteEdges));
+    });
+
+    return () => destroyCollaboration();
+  }, [projectName, setNodes, setEdges]);
+
+  useEffect(() => {
+    if (isApplyingRemoteNodesRef.current) {
+      isApplyingRemoteNodesRef.current = false;
+      return;
+    }
+
+    const ydoc = ydocRef.current;
+    if (!ydoc || nodes.length === 0) return;
+    if (nodes.some((node: any) => Boolean(node.dragging))) return;
+    const yNodes = ydoc.getArray('nodes');
+    ydoc.transact(() => {
+      yNodes.delete(0, yNodes.length);
+      yNodes.insert(0, nodes as any[]);
+    }, 'local-nodes-sync');
+  }, [nodes]);
+
+  useEffect(() => {
+    if (isApplyingRemoteEdgesRef.current) {
+      isApplyingRemoteEdgesRef.current = false;
+      return;
+    }
+
+    const ydoc = ydocRef.current;
+    if (!ydoc) return;
+    const yEdges = ydoc.getArray('edges');
+    ydoc.transact(() => {
+      yEdges.delete(0, yEdges.length);
+      yEdges.insert(0, edges as any[]);
+    }, 'local-edges-sync');
+  }, [edges]);
 
   useEffect(() => {
     if (isTemporaryGuest()) {
@@ -188,20 +400,34 @@ export default function WorkspacePage() {
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) =>
-        addEdge(
-          {
-            ...params,
-            type: 'smoothstep',
-            style: { stroke: 'rgba(59,130,246,0.5)', strokeWidth: 2.5 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
-            animated: mode === 'sim',
-          },
-          eds,
+        normalizeEdges(
+          addEdge(
+            {
+              ...params,
+              id: `e-${params.source}-${params.target}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              type: 'smoothstep',
+              style: { stroke: 'rgba(59,130,246,0.5)', strokeWidth: 2.5 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
+              animated: mode === 'sim',
+            },
+            eds,
+          ),
         ),
       );
     },
     [setEdges, mode],
   );
+
+  useEffect(() => {
+    const deduped = normalizeEdges(edges);
+    const hasLengthChange = deduped.length !== edges.length;
+    const hasIdChange = !hasLengthChange && deduped.some((edge, idx) => edge.id !== edges[idx]?.id);
+    const hasShapeChange = !hasLengthChange && !hasIdChange && deduped.some((edge, idx) => edgeSignature(edge) !== edgeSignature(edges[idx] as Edge));
+
+    if (hasLengthChange || hasIdChange || hasShapeChange) {
+      setEdges(deduped);
+    }
+  }, [edges, setEdges]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
@@ -239,6 +465,12 @@ export default function WorkspacePage() {
   };
 
   const handleGenerate = async () => {
+    if (!getUser()) {
+      setLogs(prev => [...prev, '[AUTH] Please sign in to use AI generation.']);
+      setTerminalExpanded(true);
+      return;
+    }
+
     if (isTemporaryGuest()) {
       setLogs(prev => [...prev, '[GUEST] AI generation requires authenticated account.']);
       setTerminalExpanded(true);
@@ -254,20 +486,26 @@ export default function WorkspacePage() {
         body: JSON.stringify({ prompt: aiPrompt }),
       });
       if (!response.ok) throw new Error('AI generation failed');
-      const graph = await response.json();
-      if (graph.nodes?.length > 0) {
-        setNodes(graph.nodes.map((n: any) => ({
-          ...n,
-          type: 'custom',
-          data: { ...n.data, isActive: true },
-        })));
+      const responsePayload = await response.json();
+      const graph = extractGraphPayload(responsePayload);
+
+      if (graph.nodes.length === 0) {
+        setLogs((prev) => [...prev, '[AI] No nodes generated. Try a more specific prompt.']);
+        setTerminalExpanded(true);
+        return;
       }
-      if (graph.edges?.length > 0) {
-        setEdges(graph.edges.map((e: any) => ({ ...edgeBase, ...e })));
-      }
+
+      setNodes(graph.nodes);
+      setEdges(graph.edges);
+      setLogs((prev) => [...prev, `[AI] Generated ${graph.nodes.length} nodes and ${graph.edges.length} edges.`]);
+      setTerminalExpanded(true);
+      setTimeout(() => rfInstance?.fitView?.({ padding: 0.2, duration: 500 }), 50);
+
       sendWsMessage({ type: 'graph_replace', workspaceId: projectName, nodes: graph.nodes, edges: graph.edges });
       setAiPrompt('');
     } catch (err) {
+      setLogs((prev) => [...prev, `[AI ERROR] ${err instanceof Error ? err.message : 'Unknown generation error'}`]);
+      setTerminalExpanded(true);
       console.error('[AI Generate Error]', err);
     } finally {
       setIsGenerating(false);
@@ -275,9 +513,31 @@ export default function WorkspacePage() {
   };
 
   const handleShareClick = () => {
+    const inviteUrl = new URL('/workspace', window.location.origin);
+    inviteUrl.searchParams.set('room', projectName);
+    const link = inviteUrl.toString();
+
+    navigator.clipboard.writeText(link).catch(() => {
+      const textArea = document.createElement('textarea');
+      textArea.value = link;
+      textArea.setAttribute('readonly', '');
+      textArea.style.position = 'absolute';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+    });
+
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
   };
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', projectName);
+    window.history.replaceState({}, '', url.toString());
+  }, [projectName]);
 
   const handleKillNode = (nodeId: string) => {
     setChaosEvents(prev => [...prev, {
@@ -333,13 +593,36 @@ export default function WorkspacePage() {
     setIsSimulating(false);
     setCurrentTick(0);
     setSnapshots([]);
-    setLogs(['[SYSTEM] Initializing simulation engine...']);
+    setLogs([
+      '[SYSTEM] Initializing simulation engine...',
+      `[MODE] ${simulationMode === 'deterministic' ? 'Deterministic Baseline' : 'Randomized Stress Test'}`,
+    ]);
     try {
-      const seed = Date.now() % 0xFFFFFFFF;
+      const cleanGraph = sanitizeGraph(nodes, edges);
+      if (cleanGraph.nodes.length !== nodes.length || cleanGraph.edges.length !== edges.length) {
+        setNodes(cleanGraph.nodes);
+        setEdges(cleanGraph.edges);
+        setLogs((prev) => [
+          ...prev,
+          '[SANITIZER] Invalid or duplicate graph entries were removed before simulation.',
+        ]);
+      }
+
+      const runSeed = simulationMode === 'randomized' ? Date.now() % 0xFFFFFFFF : undefined;
+      const payload: Record<string, unknown> = {
+        nodes: cleanGraph.nodes,
+        edges: cleanGraph.edges,
+        chaosEnabled: chaosEvents.length > 0,
+        chaosEvents,
+      };
+      if (typeof runSeed === 'number') {
+        payload.seed = runSeed;
+      }
+
       const response = await authFetch('/api/simulations/run', {
         method: 'POST',
         credentials: 'include',
-        body: JSON.stringify({ nodes, edges, seed, chaosEnabled: chaosEvents.length > 0, chaosEvents }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error(`Simulation failed: ${response.statusText}`);
       const result = await response.json();
@@ -362,24 +645,18 @@ export default function WorkspacePage() {
   };
 
   const handleImportDiagram = (importedNodes: any[], importedEdges: any[]) => {
-    const formattedNodes = importedNodes.map((node) => ({
+    const importedGraph = sanitizeGraph(importedNodes, importedEdges);
+    setNodes(importedGraph.nodes.map((node) => ({
       ...node,
-      type: 'custom',
       data: { ...node.data, isActive: false },
-    }));
-
-    const formattedEdges = importedEdges.map((edge) => ({
-      ...edgeBase,
-      ...edge,
-    }));
-
-    setNodes((nds) => [...nds, ...formattedNodes]);
-    setEdges((eds) => [...eds, ...formattedEdges]);
+    })));
+    setEdges(importedGraph.edges);
+    setTimeout(() => rfInstance?.fitView?.({ padding: 0.2, duration: 500 }), 50);
 
     setTerminalExpanded(true);
     const importLogs = [
       '[IMPORT] Vision API analysis complete',
-      '[HASH] Stable Blue Hash verified',
+      `[GRAPH] Loaded ${importedGraph.nodes.length} components and ${importedGraph.edges.length} flows`,
       '[READY] Workspace re-synchronized',
     ];
     setLogs(importLogs);
@@ -469,6 +746,19 @@ export default function WorkspacePage() {
               <span className="tracking-widest uppercase">{linkCopied ? 'STABLE' : 'SHARE'}</span>
             </button>
 
+            <div className="flex items-center gap-1">
+              {Array.from(peerCursors.entries()).map(([clientId, peer]) => (
+                <div
+                  key={clientId}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-black"
+                  style={{ backgroundColor: peer.color }}
+                  title={peer.name}
+                >
+                  {peer.name.charAt(0).toUpperCase()}
+                </div>
+              ))}
+            </div>
+
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -481,6 +771,14 @@ export default function WorkspacePage() {
               <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
               DEPLOY & TEST
             </motion.button>
+
+            <button
+              onClick={() => setSimulationMode((prev) => (prev === 'deterministic' ? 'randomized' : 'deterministic'))}
+              className="px-4 py-2 rounded-xl border border-white/10 text-white/80 hover:text-white hover:bg-white/5 transition-all text-[10px] font-bold tracking-widest uppercase"
+              title="Toggle simulation mode"
+            >
+              {simulationMode === 'deterministic' ? 'Deterministic' : 'Randomized'}
+            </button>
           </div>
         </div>
       </motion.header>
@@ -592,7 +890,12 @@ export default function WorkspacePage() {
         </AnimatePresence>
 
         {/* Canvas Area */}
-        <div className="flex-1 relative z-10" ref={reactFlowWrapper} onMouseMove={(e) => sendWsMessage({ type: 'cursor_move', workspaceId: projectName, userId: 'local', x: e.clientX, y: e.clientY })}>
+        <div className="flex-1 relative z-10" ref={reactFlowWrapper} onMouseMove={(e) => {
+          sendWsMessage({ type: 'cursor_move', workspaceId: projectName, userId: 'local', x: e.clientX, y: e.clientY });
+          if (providerRef.current) {
+            setLocalCursor(providerRef.current, e.clientX, e.clientY);
+          }
+        }}>
           
           {/* Toggle Sidebar Button */}
           <button
@@ -806,6 +1109,8 @@ export default function WorkspacePage() {
           universeSeed: simulationResult.universeSeed || 'N/A',
           stableHash: simulationResult.graphHash || 'N/A',
           grade: simulationResult.grade || 'F',
+          gradeScore: simulationResult.gradeScore ?? 0,
+          gradeRationale: simulationResult.gradeRationale || [],
           gradeColor: simulationResult.grade === 'A' ? '#10b981' : simulationResult.grade?.startsWith('B') ? '#3B82F6' : '#ef4444',
           status: simulationResult.status || 'UNKNOWN',
           statusColor: simulationResult.status?.includes('PASS') ? '#10b981' : '#ef4444',
@@ -825,6 +1130,8 @@ export default function WorkspacePage() {
           universeSeed: '783492',
           stableHash: 'a7c4f9d2e8b3f1a588b2c45...',
           grade: 'B+',
+          gradeScore: 82,
+          gradeRationale: ['Score breakdown — Availability: 35/35, Latency: 11/20, Fault Tolerance: 20/25, Scalability: 8/10, Operations: 8/10'],
           gradeColor: '#3B82F6',
           status: 'STABLE — PASS',
           statusColor: '#3B82F6',
@@ -855,10 +1162,22 @@ export default function WorkspacePage() {
         }
       `}</style>
 
-      {Array.from(peerCursors.entries()).map(([uid, cursor]) => (
-        <div key={uid} className="pointer-events-none fixed z-50" style={{ left: cursor.x, top: cursor.y }}>
-          <div className="w-3 h-3 rounded-full bg-blue-400 shadow-lg" />
-          <span className="text-blue-400 text-xs font-mono ml-1">{uid}</span>
+      {Array.from(peerCursors.entries()).map(([clientId, cursor]) => (
+        <div
+          key={clientId}
+          className="pointer-events-none fixed z-50 transition-all duration-75"
+          style={{ left: cursor.x, top: cursor.y }}
+        >
+          <div
+            className="w-3 h-3 rounded-full shadow-lg"
+            style={{ backgroundColor: cursor.color }}
+          />
+          <div
+            className="mt-1 px-2 py-0.5 rounded text-[10px] font-bold text-white font-mono"
+            style={{ backgroundColor: cursor.color }}
+          >
+            {cursor.name}
+          </div>
         </div>
       ))}
     </div>

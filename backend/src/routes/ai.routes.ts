@@ -1,6 +1,6 @@
 // backend/src/routes/ai.routes.ts
 import { Router } from 'express';
-import { generateArchitecture } from '../controllers/ai.controller';
+import { generateArchitecture, analyseArchitectureImage } from '../controllers/ai.controller';
 import { requireAuth } from '../middlewares/requireAuth';
 import { aiRateLimiter } from '../middlewares/rateLimiter';
 
@@ -15,5 +15,6 @@ const router = Router();
  * 3. generateArchitecture: The controller that parses the prompt and calls the AI service.
  */
 router.post('/generate', requireAuth, aiRateLimiter, generateArchitecture);
+router.post('/analyse-image', analyseArchitectureImage);
 
 export default router;

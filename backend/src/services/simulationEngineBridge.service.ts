@@ -65,6 +65,8 @@ export interface EngineRunResult {
   graphHash: string;
   universeSeed: string;
   grade: string;
+  gradeScore: number;
+  gradeRationale: string[];
   status: string;
   totalRequests: number;
   totalFailures: number;
@@ -340,6 +342,8 @@ export const runSimulationWithEngine = (
     graphHash,
     universeSeed: String(seed),
     grade: output.grade?.grade || 'F',
+    gradeScore: Number(output.grade?.score ?? 0),
+    gradeRationale: Array.isArray(output.grade?.rationale) ? output.grade.rationale : [],
     status: toReportStatus(output.status || 'crashed', output.grade?.grade || 'F'),
     totalRequests: output.totalRequests || 0,
     totalFailures: output.totalFailures || 0,

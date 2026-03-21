@@ -832,6 +832,7 @@ impl SimulationEngine {
             avg_p99_latency_ms,
             &status,
             &self.all_chaos_effects,
+            &self.snapshots,
         );
 
         // ── Cost Estimator ────────────────────────────────────────────────────

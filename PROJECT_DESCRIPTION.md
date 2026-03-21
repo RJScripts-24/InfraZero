@@ -17,57 +17,63 @@ The transition to cloud-native architectures and microservices has dramatically 
 ## 4. System Philosophy & Architecture
 
 ### A. The Three Layers
-1. **Visual Layer (The Lens)**: Renders cloud-native iconography (AWS, GCP, etc.) to provide a familiar aesthetic for users interacting with the canvas.
+1. **Visual Layer (The Lens)**: Renders cloud-native iconography (AWS, GCP, etc.) to provide a familiar aesthetic for users interacting with the canvas. Built with React and React Flow.
 2. **Logical Layer (The Engine)**: Uses provider-agnostic "Actor Models." Under the hood, a node is simply a stateful actor with properties like `processingPower` and `coldStartLatency`, cleanly decoupled from its visual counterpart.
 3. **Runtime Layer (The Ghost)**: Ephemeral and client-side execution. Traffic data (current connections, queue depth) exists only during active simulations and is never persisted to the central database, keeping the core architectural definition pristine.
 
 ### B. Technical Stack
 The project leverages a modern, highly performant stack ensuring smooth client-side rendering and deterministic execution:
-- **Frontend Workspace**: Built on **React** and powered by **Vite** for rapid tooling. Uses **Tailwind CSS** and **Shadcn UI** for component styling, enriched by dynamic animations via **Framer Motion** and **GSAP**.
+- **Frontend Workspace**: Built on **React** and powered by **Vite**. Uses **Tailwind CSS** and **Shadcn UI** for component styling, enriched by dynamic animations via **Framer Motion** and **GSAP**.
 - **Canvas Engine**: Leveraging **React Flow (`@xyflow/react`)** for the infinite grid interface, providing optimized viewport management and node/edge interactions.
-- **Backend API & Real-Time Sync**: A robust **Node.js/Express** backend written in **TypeScript**. Handles real-time syncing and messaging via **WebSockets (`ws`)**. **Supabase** acts as the primary data store and metadata hub. 
+- **Backend API & Real-Time Sync**: A robust **Node.js/Express** backend in **TypeScript**. Handles real-time syncing via **WebSockets (`ws`)**. Includes an `IntegrationStore` for project and simulation lifecycle management.
 - **AI Logic Layer**: Integrates the **Groq API** (Llama 3) for instant text-to-graph AI generation, analyzing user prompts and synthesizing architectural nodes.
-- **Physics Core (Simulation Engine)**: Engineered in **Rust** and compiled to **WebAssembly (WASM)**. It employs `wasm-bindgen`, `serde`, and `sha2` hashing to deliver near-native simulation speed that runs deterministically directly within the user's browser context.
+- **Physics Core (Simulation Engine)**: Engineered in **Rust** and compiled to **WebAssembly (WASM)**. It uses `wasm-bindgen` and `serde` to deliver near-native simulation speed that runs deterministically directly in the browser.
+- **Database & Identity**: **Supabase** (PostgreSQL) acts as the primary data store and metadata hub, with **Supabase Auth** for identity management.
 
 ## 5. Core Modules & Features
 
 ### Module 1: The Multiplayer AI-Native Canvas (The "Studio")
 - **AI Co-Designer**: Text-to-graph generation. Users provide semantic prompts (e.g., "Build a Netflix-like microservices backend") to synthesize editable node graphs instantly.
 - **Real-Time Sync**: Synchronizes canvases across multiple users in real-time, displaying "Live Cursors" and presence detection for peer-to-peer editing.
-- **Context-Aware Editing**: The AI understands system topology natively and can intelligently insert components (e.g., injecting a Redis cache implicitly between a compute node and DB layer if requested).
+- **Context-Aware Editing**: AI understands system topology natively and can intelligently insert components (e.g., injecting a Redis cache implicitly between a compute node and DB layer if requested).
 
 ### Module 2: The Deterministic Simulation Engine
-- **WASM Physics**: The visual graph is compiled downstream into a high-performance Rust struct. Requests traverse the nodes realistically as "dots" along the edges.
-- **Network Fidelity**: Edges are treated as primary computing entities with fully configurable simulation properties: `latency`, `jitter`, `packetLoss`, and `bandwidthLimit`.
-- **Chaos Engineering**: Built-in fault injection ("Chaos Mode") allows operators to manually or randomly kill nodes on the fly to observe cascading system failure metrics.
+- **WASM Physics**: Visual graph projects downstream into high-performance Rust structs. Requests traverse nodes as "dots" along edges.
+- **Network Fidelity**: Edges are treated as primary computing entities with configurable properties: `latency`, `jitter`, `packetLoss`, and `bandwidthLimit`.
+- **Chaos Engineering**: Built-in fault injection ("Chaos Mode") allows operators to manually or randomly trigger events like `kill_node`, `cpu_spike`, or `memory_pressure` on the fly.
 
 ### Module 3: The "Terminal" Ops Dashboard
 - **DevOps Experience**: A functional bottom panel terminal mimics a real production console.
-- **Live Logs**: Emits deterministic, real-time logs mirroring the state of the simulation (e.g., `[ERROR] Connection Refused: DB-Primary overloaded`).
+- **Live Logs**: Emits real-time logs mirroring the simulation state (e.g., `[ERROR] Connection Refused: DB-Primary overloaded`).
 
 ### Module 4: Post-Mortem & Reporting
-- **Automated Analysis**: Generates comprehensive reports after a simulation naturally completes or terminally crashes.
-- **Grading System**: Programmatically assigns an "Architecture Grade" (A-F) based on dynamic stress thresholds and computes an "Estimated Cost Index" (ECI).
-- **Root Cause Detection**: Flags the exact failure mode (e.g., "System failed due to aggressive retry logic causing a Retry Storm") in structured post-mortem telemetry.
+- **Automated Analysis**: Generates comprehensive reports after a simulation completes or crashes.
+- **Architecture Grading**: Programmatically assigns a grade (A-F) based on failure rates, peak latency, and recovery speed.
+- **Root Cause Detection**: Flags exact failure modes (e.g., "Capacity bottleneck on critical request path") in structured post-mortem telemetry.
+
+### Module 5: ML Pipeline & Research Infrastructure (New)
+- **GitHub Crawler**: Specialized scraper for gathering real-world distributed system architectures from public repositories.
+- **Excalidraw Parser**: Tool to convert hand-drawn `.excalidraw` architecture diagrams into machine-readable JSON graph structures for analysis and AI fine-tuning.
+- **Topology Augmentation**: Automated tools for labeling and augmenting architectural datasets to train LLMs on system reliability patterns.
 
 ## 6. Data Model (The "Source of Truth")
 The data model is strictly typed to support a reproducible "Time Travel" undo mechanism:
-- **The Graph Root**: Stabilized using robust `SHA256` hashing of the deterministic projection of nodes and edges. A shared hash ensures that multiple users rendering the same graph experience identically running simulations.
+- **The Graph Root**: Stabilized using `SHA256` hashing of the deterministic projection of nodes and edges. Ensures multi-user simulation consistency.
 - **Node Schema**:
-  - *Sim Config (Synced)*: `failureRate`, `recoveryTime`.
-  - *Visuals (Synced)*: `x, y` coordinate space mapping, provider icon definition.
-- **Universe Seed**: A consistent pseudo-random seed serialized with the graph. This guarantees identical network jitter reproduction across distinct client sessions during replay mode.
+  - *Sim Config*: `failureRate`, `recoveryTime`, `processingPowerMs`, `coldStartLatencyMs`.
+  - *Visuals*: `x, y` coordinates, provider icon, and labels.
+- **Universe Seed**: A consistent pulse-random seed serialized with the graph. Guarantees identical network jitter and failure patterns across distinct sessions.
 
 ## 7. Application Workflow
 Structured into 7 fundamental Core Pages:
-1. **Landing Page**: Marketing, core feature breakdown, and primary application entry point.
-2. **Authentication Portal**: Secure Role-Based Access Control and user identity logging.
-3. **Dashboard**: Central workspace management hub to initiate, fork, or organize architecture graphs.
-4. **Editor Workspace**: Main IDE environment containing the Canvas layout, AI Sidebar, and Terminal viewer.
-5. **Simulation Report**: Dedicated output view for post-mortem analytics and deep-dive telemetry exports.
-6. **Settings**: User theme mapping and layout preferences.
-7. **Error Boundary**: Resilient localized fallbacks ensuring protection across broken links or missing state imports.
+1. **Landing Page**: Features high-fidelity animations (Aurora, SplitText) and primary marketing entry.
+2. **Authentication Portal**: GitHub-based OAuth and identity management via Supabase.
+3. **Dashboard**: Central workspace for managing projects, forking templates, and viewing recent activity.
+4. **Editor Workspace**: Main IDE containing Canvas, AI Sidebar, Node Configuration Palette, and Simulation Terminal.
+5. **Simulation Report**: Dedicated view for deep-dive telemetry, metrics charts, and AI-generated improvement recommendations.
+6. **Settings**: Appearance (Dark/Light Mode), account settings, and engine preferences.
+7. **Error Boundary**: Resilient fallbacks for broken links or state corruption.
 
 ## 8. Research & Educational Value
 - **Core Thesis**: Proving that System and Reliability Engineering can be democratized by combining LLM-powered architecture generation with robust client-side physics verification.
-- **"Library of Doom"**: An integrated educational directory featuring pre-loaded, notoriously broken architectures (such as "The Thundering Herd" or unbound "Retry Storms"). It is intentionally designed to teach learners how to proactively discover and rectify real-world reliability anti-patterns.
+- **"Library of Doom"**: An integrated educational directory featuring pre-loaded, notoriously broken architectures (such as "The Thundering Herd" or "Retry Storms") to teach proactive reliability engineering.

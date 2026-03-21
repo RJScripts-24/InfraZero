@@ -11,6 +11,8 @@ interface ReportViewProps {
     universeSeed: string;
     stableHash: string;
     grade: string;
+   gradeScore?: number;
+   gradeRationale?: string[];
     gradeColor: string;
     status: string;
     statusColor: string;
@@ -27,6 +29,57 @@ interface ReportViewProps {
       groqReview?: string;
   };
 }
+
+const extractPillarScores = (rationale: string[] | undefined): Record<string, string> => {
+   const fallback = {
+      avail: '-',
+      latency: '-',
+      runtimeStability: '-',
+      faultTol: '-',
+      antiPatterns: '-',
+      network: '-',
+      scalability: '-',
+      operations: '-',
+      peakErrors: '-',
+      failConfig: '-',
+   };
+
+   if (!Array.isArray(rationale)) {
+      return fallback;
+   }
+
+   const breakdown = rationale.find((line) => line.includes('Score breakdown'));
+   if (!breakdown) {
+      return fallback;
+   }
+
+   const normalized = breakdown.replace(/^.*Score breakdown\s*[-—]\s*/, '');
+   const parts = normalized.split(',').map((p) => p.trim());
+
+   const parsed: Record<string, string> = {};
+   for (const part of parts) {
+      const idx = part.indexOf(':');
+      if (idx === -1) {
+         continue;
+      }
+      const key = part.slice(0, idx).trim();
+      const value = part.slice(idx + 1).trim().replace(/\s*=\s*\d+\/100$/, '');
+      parsed[key] = value;
+   }
+
+   return {
+      avail: parsed.Avail ?? '-',
+      latency: parsed.Latency ?? '-',
+      runtimeStability: parsed.RuntimeStability ?? '-',
+      faultTol: parsed.FaultTol ?? '-',
+      antiPatterns: parsed.AntiPatterns ?? '-',
+      network: parsed.Network ?? '-',
+      scalability: parsed.Scalability ?? '-',
+      operations: parsed.Operations ?? '-',
+      peakErrors: parsed.PeakErrors ?? '-',
+      failConfig: parsed.FailConfig ?? '-',
+   };
+};
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -55,6 +108,8 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
   const handleDownloadPDF = () => {
     console.log('Downloading PDF report...');
   };
+
+   const pillarScores = extractPillarScores(reportData.gradeRationale);
 
   return (
     <AnimatePresence>
@@ -168,6 +223,9 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                        <div className={`mt-4 px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest inline-block ${reportData.status.includes('PASS') ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
                           {reportData.status}
                        </div>
+                       <div className="mt-3 text-zinc-400 font-mono text-xs">
+                          Score: {reportData.gradeScore ?? 0}/100
+                       </div>
                     </div>
 
                     {/* Stats Grid */}
@@ -189,6 +247,83 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                     </div>
                  </div>
               </motion.div>
+
+              {/* Reliability Grading System */}
+              <div className="mb-10 p-8 rounded-[32px] bg-zinc-900/40 backdrop-blur-3xl border border-white/10">
+                 <h3 className="text-white font-bold text-lg mb-2">Reliability Grading System</h3>
+                 <p className="text-zinc-400 text-sm mb-6">Industry SRE model: 10 pillars, total score out of 100, deterministic thresholds.</p>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                       <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-3">Grade Thresholds</div>
+                       <div className="space-y-2 text-sm font-mono">
+                          <div className="text-zinc-200">A: 90-100</div>
+                          <div className="text-zinc-200">B: 80-89</div>
+                          <div className="text-zinc-200">C: 70-79</div>
+                          <div className="text-zinc-200">D: 60-69</div>
+                          <div className="text-zinc-200">F: 0-59</div>
+                       </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                       <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-3">Pillar Weights</div>
+                       <div className="space-y-2 text-sm font-mono">
+                          <div className="text-zinc-200">Avail: 20, Latency: 12, RuntimeStability: 15</div>
+                          <div className="text-zinc-200">FaultTol: 13, AntiPatterns: 15, Network: 8</div>
+                          <div className="text-zinc-200">Scalability: 7, Operations: 5, PeakErrors: 3, FailConfig: 2</div>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
+                    <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-3">Current Run Calculation</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Avail</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.avail}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Latency</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.latency}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">RuntimeStability</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.runtimeStability}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">FaultTol</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.faultTol}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">AntiPatterns</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.antiPatterns}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Network</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.network}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Scalability</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.scalability}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">Operations</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.operations}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">PeakErrors</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.peakErrors}</div>
+                       </div>
+                       <div className="rounded-xl bg-black/40 border border-white/10 p-3">
+                          <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">FailConfig</div>
+                          <div className="text-white font-mono text-sm mt-1">{pillarScores.failConfig}</div>
+                       </div>
+                    </div>
+                    <div className="mt-4 text-blue-300 font-mono text-sm">
+                       Total: {reportData.gradeScore ?? 0}/100 -&gt; Grade {reportData.grade || 'F'}
+                    </div>
+                 </div>
+              </div>
 
               {/* Analysis & Chart Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
@@ -256,6 +391,17 @@ export function ReportView({ isOpen, onClose, projectName, reportData }: ReportV
                             </div>
                           ))}
                        </div>
+
+                       {Array.isArray(reportData.gradeRationale) && reportData.gradeRationale.length > 0 && (
+                          <div className="mt-6 rounded-2xl border border-white/10 bg-black/40 p-4">
+                             <div className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-2">Reliability Grader Rationale</div>
+                             <div className="space-y-2">
+                                {reportData.gradeRationale.map((item, idx) => (
+                                  <p key={idx} className="font-mono text-zinc-400 text-xs leading-relaxed">{item}</p>
+                                ))}
+                             </div>
+                          </div>
+                       )}
 
                                   {reportData.groqReview && (
                                      <div className="mt-6 rounded-2xl border border-white/10 bg-black/40 p-4">

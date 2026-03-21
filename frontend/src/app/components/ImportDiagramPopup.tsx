@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Upload, ChevronDown, ChevronRight, Check, AlertCircle } from 'lucide-react';
+import { X, Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { authFetch } from '../../lib/auth';
 
 interface ImportDiagramPopupProps {
   isOpen: boolean;
@@ -13,26 +14,15 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractionLogs, setExtractionLogs] = useState<string[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [showMappingControls, setShowMappingControls] = useState(false);
-  const [hasError, setHasError] = useState(false);
+  const [, setHasError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock detection data (Updated to Blue Theme)
   const detectionData = {
-    confidence: 87,
-    nodes: [
-      { label: 'Load Balancer', count: 1 },
-      { label: 'API Services', count: 3 },
-      { label: 'Database', count: 1 },
-      { label: 'Redis Cache', count: 1 },
-      { label: 'Queue', count: 1 },
-    ],
-    relationships: [
-      { from: 'LB', to: 'API' },
-      { from: 'API', to: 'DB' },
-      { from: 'API', to: 'Redis' },
-      { from: 'API', to: 'Queue' },
-    ],
+    confidence: analysisResult?.confidence || 0,
+    nodes: analysisResult?.componentSummary || [],
+    relationships: analysisResult?.edges || [],
   };
 
   const handleFileSelect = (file: File) => {
@@ -51,22 +41,59 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
     };
     reader.readAsDataURL(file);
 
+    // Real logs that show as image is being sent to AI
     const logs = [
-      '[OCR] Analyzing pixel density...',
-      '[AI] Extracting topology clusters...',
-      '[GRAPH] Mapping to brand-blue deterministic primitives...',
-      '[SEED] Universe Vector stable: 847.293',
+      '[VISION] Encoding image for analysis...',
+      '[AI] Sending to vision model...',
+      '[GRAPH] Extracting topology clusters...',
+      '[SEED] Mapping to simulation primitives...',
     ];
 
     setExtractionLogs([]);
-    logs.forEach((log, i) => {
-      setTimeout(() => {
-        setExtractionLogs((prev) => [...prev, log]);
-        if (i === logs.length - 1) {
-          setIsProcessing(false);
-        }
-      }, i * 500);
-    });
+    setAnalysisResult(null);
+
+    // Show first two logs immediately
+    setTimeout(() => setExtractionLogs([logs[0]]), 100);
+    setTimeout(() => setExtractionLogs(prev => [...prev, logs[1]]), 600);
+
+    // Convert file to base64 and call backend
+    const reader2 = new FileReader();
+    reader2.onload = async (e2) => {
+      const dataUrl = e2.target?.result as string;
+      // Extract base64 part after "data:image/png;base64,"
+      const base64 = dataUrl.split(',')[1];
+      const mimeType = file.type;
+
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
+        img.onerror = () => resolve({ width: 0, height: 0 });
+        img.src = dataUrl;
+      });
+
+      try {
+        const response = await authFetch('/api/ai/analyse-image', {
+          method: 'POST',
+          body: JSON.stringify({ imageBase64: base64, mimeType, imageWidth: dimensions.width, imageHeight: dimensions.height }),
+        });
+
+        if (!response.ok) throw new Error('Vision analysis failed');
+        const result = await response.json();
+
+        setAnalysisResult(result);
+        setExtractionLogs(prev => [
+          ...prev,
+          logs[2],
+          `[SEED] Found ${result.nodeCount} components, ${result.edgeCount} connections`,
+        ]);
+      } catch (err) {
+        setExtractionLogs(prev => [...prev, '[ERROR] Analysis failed. Try a clearer image.']);
+        setHasError(true);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader2.readAsDataURL(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -80,21 +107,9 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
   };
 
   const handleImportClick = () => {
+    if (!analysisResult) return;
+    onImport(analysisResult.nodes, analysisResult.edges);
     onClose();
-    const mockNodes = [
-      { id: 'imported-1', type: 'custom', position: { x: 100, y: 50 }, data: { label: 'Load Balancer', type: 'Load Balancer', isActive: false } },
-      { id: 'imported-2', type: 'custom', position: { x: 50, y: 200 }, data: { label: 'API Service 1', type: 'Node Service', isActive: false } },
-      { id: 'imported-3', type: 'custom', position: { x: 200, y: 200 }, data: { label: 'API Service 2', type: 'Node Service', isActive: false } },
-      { id: 'imported-4', type: 'custom', position: { x: 100, y: 350 }, data: { label: 'PostgreSQL', type: 'Database', isActive: false } },
-      { id: 'imported-5', type: 'custom', position: { x: 300, y: 350 }, data: { label: 'Redis Cache', type: 'Cache', isActive: false } },
-    ];
-    const mockEdges = [
-      { id: 'ie1', source: 'imported-1', target: 'imported-2' },
-      { id: 'ie2', source: 'imported-1', target: 'imported-3' },
-      { id: 'ie3', source: 'imported-2', target: 'imported-4' },
-      { id: 'ie4', source: 'imported-3', target: 'imported-5' },
-    ];
-    onImport(mockNodes, mockEdges);
   };
 
   return (
@@ -228,7 +243,7 @@ export function ImportDiagramPopup({ isOpen, onClose, onImport }: ImportDiagramP
                           </button>
                           {showMappingControls && (
                             <div className="mt-4 p-5 rounded-2xl border border-white/5 bg-white/[0.02] space-y-4">
-                               {detectionData.nodes.map((node, i) => (
+                               {detectionData.nodes.map((node: any, i: number) => (
                                  <div key={i} className="flex items-center justify-between text-xs">
                                     <span className="text-zinc-500 font-mono tracking-tight">{node.label}</span>
                                     <span className="text-blue-500 font-bold uppercase tracking-tighter">Recognized</span>
