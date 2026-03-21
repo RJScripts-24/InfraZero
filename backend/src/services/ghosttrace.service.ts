@@ -9,6 +9,7 @@ import {
   SyntheticSpan,
 } from '../types/ghosttrace';
 import { buildDeterministicTopologyHash, orderNodesDeterministically } from '../utils/deterministicTopology';
+import { logger } from '../utils/logger';
 
 const DEFAULT_PROCESSING_POWER_MS = 100;
 const DEFAULT_FAILURE_RATE = 5;
@@ -488,15 +489,52 @@ export const predictAnomalyClass = (
   return 'Stable - No Major Anomaly Predicted';
 };
 
+const callInferenceServer = async (
+  nodes: CustomNode[],
+  edges: CustomEdge[],
+): Promise<{ predictedClass: string; confidence: number; topologyEmbedding: number[] } | null> => {
+  const inferenceUrl = process.env.INFERENCE_SERVER_URL || 'http://localhost:8001';
+
+  try {
+    const response = await fetch(`${inferenceUrl}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nodes, edges }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    logger.info(
+      `[GhostTrace] ML inference: ${data.predictedClass} (${(data.confidence * 100).toFixed(1)}% confidence, ${data.inferenceTimeMs}ms)`,
+    );
+
+    return {
+      predictedClass: data.predictedClass,
+      confidence: data.confidence,
+      topologyEmbedding: data.topologyEmbedding,
+    };
+  } catch (err) {
+    void err;
+    // Inference server unavailable - fall back to rule-based silently.
+    logger.warn('[GhostTrace] Inference server unavailable, using rule-based classifier');
+    return null;
+  }
+};
+
 export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTraceResult> => {
   const { nodes, edges, trafficPattern = 'steady' } = request;
   const features = extractGraphFeatures(nodes, edges);
+  const mlPrediction = await callInferenceServer(request.nodes, request.edges);
   const edgeRisks = computeEdgeRisks(nodes, edges, features).sort((a, b) => b.riskScore - a.riskScore);
   const nodeRisks = computeNodeRisks(nodes, edges, features).sort((a, b) => b.riskScore - a.riskScore);
-  const topologyEmbedding = buildTopologyEmbedding(features);
+  const topologyEmbedding = mlPrediction?.topologyEmbedding ?? buildTopologyEmbedding(features);
   const graphHash = getGraphHash(nodes, edges);
   const syntheticSpans = synthesizeTraces(nodes, edges, edgeRisks, trafficPattern, graphHash);
-  const predictedAnomalyClass = predictAnomalyClass(features, edgeRisks, nodeRisks);
+  const predictedAnomalyClass = mlPrediction?.predictedClass ?? predictAnomalyClass(features, edgeRisks, nodeRisks);
   const overallRisk = clamp(
     Math.max(
       edgeRisks[0]?.riskScore ?? 0,

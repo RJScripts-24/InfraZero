@@ -234,9 +234,10 @@ class GhostTraceGNN(nn.Module):
 class GraphDataset(Dataset):
     """Load labeled graph JSON files from data/graphs."""
 
-    def __init__(self, root_dir: Path | str | None = None) -> None:
+    def __init__(self, root_dir: Path | str | None = None, debug: bool = False) -> None:
         super().__init__()
         self.root_dir = Path(root_dir or DEFAULT_GRAPH_DIR).resolve()
+        self.debug = debug
         self.graph_files = sorted(
             path
             for path in self.root_dir.rglob("*.json")
@@ -249,6 +250,14 @@ class GraphDataset(Dataset):
     def get(self, index: int) -> Data:
         file_path = self.graph_files[index]
         graph = json.loads(file_path.read_text(encoding="utf-8"))
+        nodes = resolve_nodes(graph)
+        edges = resolve_edges(graph)
+        if self.debug and index == 0 and nodes:
+            x = build_node_features(nodes, edges)
+            in_degree, out_degree = build_degree_maps(nodes, edges)
+            print(f"[DEBUG] First node features: {x[0].tolist()}")
+            print(f"[DEBUG] in_degree: {dict(list(in_degree.items())[:5])}")
+            print(f"[DEBUG] out_degree: {dict(list(out_degree.items())[:5])}")
         data = graph_to_data(graph)
         data.graph_name = file_path.stem
         return data

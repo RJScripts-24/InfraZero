@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, Trash2 } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, Trash2 } from 'lucide-react';
 import { authFetch } from '../../lib/auth';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
@@ -39,6 +39,13 @@ interface BreachRoomImportModalProps {
 
 const EVENT_TYPES: IncidentEventType[] = ['latency_spike', 'error_rate', 'timeout', 'crash'];
 const EVENT_SEVERITIES: IncidentSeverity[] = ['critical', 'high', 'medium', 'low'];
+
+const severityBadgeClass = (severity: IncidentSeverity): string => {
+  if (severity === 'critical') return 'border-red-500/35 bg-red-500/20 text-red-200';
+  if (severity === 'high') return 'border-red-500/20 bg-red-500/10 text-red-200';
+  if (severity === 'medium') return 'border-amber-500/25 bg-amber-500/15 text-amber-200';
+  return 'border-amber-500/15 bg-amber-500/10 text-amber-100';
+};
 
 const toIsoTime = (value: string): string => {
   if (!value) return new Date().toISOString();
@@ -207,64 +214,87 @@ export function BreachRoomImportModal({ isOpen, onClose, onImport }: BreachRoomI
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[90vh] overflow-hidden border-zinc-700 bg-zinc-900 text-zinc-100 sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle className="text-xl text-zinc-100">Import Incident Timeline</DialogTitle>
-          <DialogDescription className="text-zinc-400">
-            Bring in incidents from manual notes or operational webhook payloads and replay them against GhostTrace output.
-          </DialogDescription>
+      <DialogContent className="max-h-[90vh] overflow-hidden rounded-[32px] border border-white/10 bg-zinc-950/70 p-0 text-zinc-100 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.55)] backdrop-blur-3xl sm:max-w-3xl">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-500/55 to-transparent" />
+
+        <DialogHeader className="border-b border-white/10 px-8 py-6">
+          <div className="flex items-start gap-4">
+            <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300">
+              <ShieldAlert size={18} />
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-red-400/70">Incident Replay</div>
+              <DialogTitle className="text-2xl font-bold tracking-tight text-white">BreachRoom Import</DialogTitle>
+              <DialogDescription className="mt-2 max-w-[560px] text-zinc-400">
+                Import incident timelines in the same deterministic workflow as Workspace and Dashboard analysis flows.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <Tabs defaultValue="manual" className="mt-1">
-          <TabsList className="grid w-full grid-cols-3 bg-zinc-800/70">
-            <TabsTrigger value="manual" className="data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">
+        <div
+          className="max-h-[calc(90vh-170px)] overflow-y-auto px-8 py-6"
+          style={{ scrollbarGutter: 'stable' }}
+        >
+        <Tabs defaultValue="manual" className="mt-0 gap-3">
+          <TabsList className="grid h-12 w-full grid-cols-3 rounded-2xl border border-white/15 bg-zinc-900/90 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <TabsTrigger value="manual" className="rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-300 transition-colors hover:text-white data-[state=active]:border data-[state=active]:border-blue-500/30 data-[state=active]:bg-zinc-700 data-[state=active]:text-white data-[state=active]:shadow-[0_0_0_1px_rgba(59,130,246,0.18)_inset]">
               Manual Entry
             </TabsTrigger>
-            <TabsTrigger value="pagerduty" className="data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">
+            <TabsTrigger value="pagerduty" className="rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-300 transition-colors hover:text-white data-[state=active]:border data-[state=active]:border-blue-500/30 data-[state=active]:bg-zinc-700 data-[state=active]:text-white data-[state=active]:shadow-[0_0_0_1px_rgba(59,130,246,0.18)_inset]">
               PagerDuty JSON
             </TabsTrigger>
-            <TabsTrigger value="datadog" className="data-[state=active]:bg-zinc-700 data-[state=active]:text-zinc-100">
+            <TabsTrigger value="datadog" className="rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-300 transition-colors hover:text-white data-[state=active]:border data-[state=active]:border-blue-500/30 data-[state=active]:bg-zinc-700 data-[state=active]:text-white data-[state=active]:shadow-[0_0_0_1px_rgba(59,130,246,0.18)_inset]">
               Datadog JSON
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="manual" className="mt-4 space-y-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="md:col-span-3">
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Title</label>
-                <Input value={title} onChange={(event) => setTitle(event.target.value)} className="border-zinc-700 bg-zinc-800 text-zinc-100" />
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Step 1</p>
+                  <p className="text-sm font-semibold text-zinc-100">Incident Metadata</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300">
+                  {events.length} events | {affectedCount} nodes
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Start Time</label>
-                <Input
-                  type="datetime-local"
-                  value={startTime}
-                  onChange={(event) => setStartTime(event.target.value)}
-                  className="border-zinc-700 bg-zinc-800 text-zinc-100"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">End Time</label>
-                <Input
-                  type="datetime-local"
-                  value={endTime}
-                  onChange={(event) => setEndTime(event.target.value)}
-                  className="border-zinc-700 bg-zinc-800 text-zinc-100"
-                />
-              </div>
-              <div className="flex items-end">
-                <div className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-300">
-                  {events.length} events | {affectedCount} affected nodes
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Title</label>
+                  <Input value={title} onChange={(event) => setTitle(event.target.value)} className="border-zinc-700 bg-zinc-800 text-zinc-100" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Start Time</label>
+                  <Input
+                    type="datetime-local"
+                    value={startTime}
+                    onChange={(event) => setStartTime(event.target.value)}
+                    className="border-zinc-700 bg-zinc-800 text-zinc-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">End Time</label>
+                  <Input
+                    type="datetime-local"
+                    value={endTime}
+                    onChange={(event) => setEndTime(event.target.value)}
+                    className="border-zinc-700 bg-zinc-800 text-zinc-100"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="rounded-lg border border-zinc-700/80 bg-zinc-800/40 p-4">
-              <div className="mb-3 text-sm font-semibold text-zinc-200">Add Event</div>
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              <div className="mb-3">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Step 2</p>
+                <p className="text-sm font-semibold text-zinc-100">Add Event</p>
+              </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Node ID</label>
-                  <Input value={nodeId} onChange={(event) => setNodeId(event.target.value)} className="border-zinc-700 bg-zinc-800 text-zinc-100" />
+                  <Input value={nodeId} onChange={(event) => setNodeId(event.target.value)} className="border-zinc-700 bg-zinc-800 text-zinc-100" placeholder="api-gateway" />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-400">Event Type</label>
@@ -302,44 +332,59 @@ export function BreachRoomImportModal({ isOpen, onClose, onImport }: BreachRoomI
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
                     className="min-h-20 border-zinc-700 bg-zinc-800 text-zinc-100"
+                    placeholder="Database read latency crossed 2.5s and retries escalated."
                   />
                 </div>
               </div>
 
               <div className="mt-3 flex justify-end">
-                <Button type="button" onClick={handleAddEvent} className="bg-amber-500/80 text-black hover:bg-amber-400">
+                <Button type="button" onClick={handleAddEvent} className="iz-btn-blue rounded-xl px-5 text-white">
                   Add Event
                 </Button>
               </div>
             </div>
 
-            <div className="flex max-h-24 flex-wrap gap-2 overflow-y-auto rounded-lg border border-zinc-700/80 bg-zinc-800/30 p-3">
-              {events.length === 0 && <div className="text-xs text-zinc-500">No events added yet.</div>}
-              {events.map((event) => (
-                <Badge key={event.id} className="gap-2 border-zinc-600 bg-zinc-700/60 px-2 py-1 text-zinc-100">
-                  <span className="font-mono text-[11px]">{event.affectedNodeId}</span>
-                  <span className="text-[11px] opacity-80">{event.type}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveEvent(event.id)}
-                    className="rounded p-0.5 text-zinc-300 transition-colors hover:bg-zinc-600 hover:text-white"
-                    aria-label="Remove event"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </Badge>
-              ))}
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              <div className="mb-3">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Step 3</p>
+                <p className="text-sm font-semibold text-zinc-100">Review Events</p>
+              </div>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-lg border border-zinc-700/70 bg-zinc-800/30 p-3">
+                {events.length === 0 && <div className="text-xs text-zinc-500">No events added yet.</div>}
+                {events.map((event) => (
+                  <div key={event.id} className="rounded-lg border border-zinc-700 bg-zinc-800/60 px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-mono text-xs text-zinc-100">{event.affectedNodeId}</span>
+                        <Badge className="border-zinc-600 bg-zinc-700 text-[10px] text-zinc-100">{event.type}</Badge>
+                        <Badge className={`text-[10px] ${severityBadgeClass(event.severity)}`}>{event.severity}</Badge>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEvent(event.id)}
+                        className="rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-white"
+                        aria-label="Remove event"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-300">{event.description}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              {parseError && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+              {parseError ? (
                 <div className="flex items-center gap-2 text-sm text-red-300">
                   <AlertTriangle size={14} />
                   <span>{parseError}</span>
                 </div>
+              ) : (
+                <div className="text-xs text-zinc-500">Import will map events across the selected time window.</div>
               )}
-              <Button type="button" onClick={handleManualImport} className="ml-auto bg-blue-500 text-white hover:bg-blue-400">
-                Import
+              <Button type="button" onClick={handleManualImport} className="iz-btn-blue ml-auto rounded-xl px-5 text-white">
+                Import Timeline
               </Button>
             </div>
           </TabsContent>
@@ -361,7 +406,7 @@ export function BreachRoomImportModal({ isOpen, onClose, onImport }: BreachRoomI
                 type="button"
                 onClick={() => void handleParseImport('pagerduty', pagerDutyRaw)}
                 disabled={isParsing}
-                className="ml-auto bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50"
+                className="iz-btn-blue ml-auto rounded-xl px-5 text-white disabled:opacity-50"
               >
                 {isParsing ? 'Parsing...' : 'Parse & Import'}
               </Button>
@@ -385,13 +430,14 @@ export function BreachRoomImportModal({ isOpen, onClose, onImport }: BreachRoomI
                 type="button"
                 onClick={() => void handleParseImport('datadog', datadogRaw)}
                 disabled={isParsing}
-                className="ml-auto bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50"
+                className="iz-btn-blue ml-auto rounded-xl px-5 text-white disabled:opacity-50"
               >
                 {isParsing ? 'Parsing...' : 'Parse & Import'}
               </Button>
             </div>
           </TabsContent>
         </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );
