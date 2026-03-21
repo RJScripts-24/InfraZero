@@ -3,320 +3,405 @@
 from __future__ import annotations
 
 import json
+import os
 import random
+import sys
+from collections import Counter
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from uuid import uuid4
+
+from dotenv import load_dotenv
+from tqdm import tqdm
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-GRAPHS_DIR = (ROOT_DIR / "data" / "graphs").resolve()
-TRACES_DIR = (ROOT_DIR / "data" / "traces").resolve()
 
 
 def to_float(value: object, default: float = 0.0) -> float:
-    """Safely convert arbitrary input to float."""
-
     try:
         return float(value)
     except (TypeError, ValueError):
         return default
 
 
-def resolve_nodes(graph_json: Dict) -> List[Dict]:
-    """Return graph nodes as a list."""
-
-    nodes = graph_json.get("nodes", [])
-    return nodes if isinstance(nodes, list) else []
+def edge_source(edge: dict) -> str:
+    return str(edge.get("source", edge.get("from", ""))).strip()
 
 
-def resolve_edges(graph_json: Dict) -> List[Dict]:
-    """Return graph edges as a list."""
-
-    edges = graph_json.get("edges", [])
-    return edges if isinstance(edges, list) else []
+def edge_target(edge: dict) -> str:
+    return str(edge.get("target", edge.get("to", ""))).strip()
 
 
-def edge_source(edge: Dict) -> str:
-    """Return normalized edge source id."""
-
-    return str(edge.get("source", edge.get("from", "")))
-
-
-def edge_target(edge: Dict) -> str:
-    """Return normalized edge target id."""
-
-    return str(edge.get("target", edge.get("to", "")))
+def get_node_data(node: dict) -> dict:
+    data = node.get("data", {})
+    return data if isinstance(data, dict) else {}
 
 
-def extract_node_metric(node: Dict, field_name: str, default: float = 0.0) -> float:
-    """Read node metric from either node.data or the node root."""
+def build_adjacency(nodes: list[dict], edges: list[dict]) -> dict[str, list[str]]:
+    """Returns {nodeId: [neighbor nodeIds]} with only valid node endpoints."""
+    node_ids = {str(node.get("id", "")).strip() for node in nodes if str(node.get("id", "")).strip()}
+    adjacency: dict[str, list[str]] = {node_id: [] for node_id in node_ids}
 
-    node_data = node.get("data", {}) if isinstance(node.get("data"), dict) else {}
-    if field_name in node_data:
-        return to_float(node_data.get(field_name), default)
-    return to_float(node.get(field_name), default)
-
-
-def extract_node_label(node: Dict) -> str:
-    """Return a display label for the node."""
-
-    node_data = node.get("data", {}) if isinstance(node.get("data"), dict) else {}
-    return str(node_data.get("label", node.get("label", node.get("id", "unknown"))))
-
-
-def extract_node_type(node: Dict) -> str:
-    """Return a normalized node type."""
-
-    node_data = node.get("data", {}) if isinstance(node.get("data"), dict) else {}
-    return str(node_data.get("type", node.get("type", "Service")))
-
-
-def build_adjacency(graph_json: Dict) -> tuple[Dict[str, List[str]], Dict[str, List[str]]]:
-    """Build outgoing and incoming adjacency maps."""
-
-    outgoing: Dict[str, List[str]] = {}
-    incoming: Dict[str, List[str]] = {}
-
-    for node in resolve_nodes(graph_json):
-        node_id = str(node.get("id", ""))
-        outgoing[node_id] = []
-        incoming[node_id] = []
-
-    for edge in resolve_edges(graph_json):
+    for edge in edges:
         source = edge_source(edge)
         target = edge_target(edge)
-        if source not in outgoing or target not in incoming:
-            continue
-        outgoing[source].append(target)
-        incoming[target].append(source)
+        if source in node_ids and target in node_ids:
+            adjacency[source].append(target)
 
-    return outgoing, incoming
+    return adjacency
 
 
-def build_paths(graph_json: Dict, limit: int = 3) -> List[List[str]]:
-    """Walk the graph breadth-first from entry nodes."""
+def find_entry_nodes(nodes: list[dict], edges: list[dict]) -> list[dict]:
+    """Return nodes with no incoming edges; fallback to highest out-degree node for pure cycles."""
+    node_ids = [str(node.get("id", "")).strip() for node in nodes if str(node.get("id", "")).strip()]
+    incoming = Counter({node_id: 0 for node_id in node_ids})
+    outgoing = Counter({node_id: 0 for node_id in node_ids})
 
-    nodes = resolve_nodes(graph_json)
+    for edge in edges:
+        source = edge_source(edge)
+        target = edge_target(edge)
+        if source in outgoing:
+            outgoing[source] += 1
+        if target in incoming:
+            incoming[target] += 1
+
+    entry = [node for node in nodes if incoming[str(node.get("id", "")).strip()] == 0]
+    if entry:
+        return entry
+
     if not nodes:
         return []
 
-    outgoing, incoming = build_adjacency(graph_json)
-    entry_nodes = [str(node.get("id", "")) for node in nodes if len(incoming.get(str(node.get("id", "")), [])) == 0]
-    queue = [[node_id] for node_id in (entry_nodes or [str(nodes[0].get("id", ""))])]
-    paths: List[List[str]] = []
+    best_node = max(nodes, key=lambda node: outgoing[str(node.get("id", "")).strip()])
+    return [best_node]
 
-    while queue and len(paths) < limit:
-        path = queue.pop(0)
-        current = path[-1]
-        next_nodes = [node_id for node_id in outgoing.get(current, []) if node_id not in path]
-        if not next_nodes:
+
+def find_all_paths(graph: dict[str, list[str]], entry_node_id: str, max_depth: int = 8) -> list[list[str]]:
+    """DFS path discovery with cycle protection and branch fan-out cap."""
+    if not entry_node_id:
+        return []
+
+    paths: list[list[str]] = []
+
+    def dfs(current: str, path: list[str], visited: set[str]) -> None:
+        if len(paths) >= 6:
+            return
+
+        neighbors = graph.get(current, [])
+        # Stop when leaf reached.
+        if not neighbors:
             paths.append(path)
-            continue
-        for node_id in next_nodes:
-            queue.append(path + [node_id])
+            return
 
-    return paths
+        # Stop when depth exceeded.
+        if len(path) > max_depth:
+            paths.append(path)
+            return
+
+        expanded = False
+        for neighbor in neighbors:
+            # Stop expansion on cycle and keep current path snapshot.
+            if neighbor in visited:
+                paths.append(path)
+                continue
+            expanded = True
+            dfs(neighbor, path + [neighbor], visited | {neighbor})
+            if len(paths) >= 6:
+                return
+
+        if not expanded and len(paths) < 6:
+            paths.append(path)
+
+    dfs(entry_node_id, [entry_node_id], {entry_node_id})
+
+    if not paths:
+        return [[entry_node_id]]
+    return paths[:6]
 
 
-def make_rng(graph_json: Dict, anomaly_class: str) -> random.Random:
-    """Create a deterministic RNG from graph id and anomaly class."""
+def node_to_operation(node: dict) -> str:
+    node_type = str(get_node_data(node).get("type", node.get("type", "Service"))).strip().lower()
 
-    seed_source = f"{graph_json.get('graph_id', 'graph')}:{anomaly_class}"
-    return random.Random(seed_source)
+    if node_type in {"postgresql", "database"} or "database" in node_type or "postgres" in node_type:
+        return "db.query"
+    if node_type in {"cache", "redis"} or "cache" in node_type or "redis" in node_type:
+        return "cache.get"
+    if node_type in {"rabbitmq", "queue"} or "rabbit" in node_type or "queue" in node_type:
+        return "queue.publish"
+    if node_type == "gateway" or "gateway" in node_type:
+        return "http.request"
+    if node_type in {"infrastructure", "load balancer"} or "load balancer" in node_type:
+        return "lb.route"
+    if node_type in {"edge network", "cdn"} or "cdn" in node_type:
+        return "cdn.serve"
+    return "service.call"
 
 
-def create_span(
+def compute_span_duration(node: dict, edge: dict | None, anomaly_class: str, path_position: int) -> float:
+    node_data = get_node_data(node)
+
+    base = to_float(node_data.get("processingPowerMs"), random.uniform(20, 150))
+    edge_latency = to_float(edge.get("latencyMs") if edge else None, random.uniform(10, 80))
+    jitter = random.uniform(-10, 30)
+
+    if anomaly_class == "thundering_herd":
+        if path_position == 0:
+            multiplier = random.uniform(8, 20)
+        else:
+            multiplier = random.uniform(1, 3)
+    elif anomaly_class == "cascading_failure":
+        if path_position > 2:
+            multiplier = random.uniform(5, 15)
+        else:
+            multiplier = random.uniform(1, 2)
+    elif anomaly_class == "retry_storm":
+        multiplier = random.uniform(3, 8)
+    else:
+        multiplier = random.uniform(0.8, 1.2)
+
+    return max(1.0, (base + edge_latency + jitter) * multiplier)
+
+
+def compute_span_status(
+    node: dict,
+    edge: dict | None,
+    anomaly_class: str,
+    duration: float,
+    path_position: int,
+) -> str:
+    _ = node
+    _ = edge
+
+    if anomaly_class == "thundering_herd":
+        error_probability = 0.35 if path_position == 0 else 0.10
+    elif anomaly_class == "cascading_failure":
+        error_probability = min(0.95, 0.05 * path_position)
+    elif anomaly_class == "retry_storm":
+        error_probability = 0.25
+    else:
+        error_probability = 0.02
+
+    if duration > 1000:
+        timeout_probability = 0.4
+    elif duration > 500:
+        timeout_probability = 0.2
+    else:
+        timeout_probability = 0.02
+
+    r = random.random()
+    if r < error_probability:
+        return "error"
+    if r < error_probability + timeout_probability:
+        return "timeout"
+    return "ok"
+
+
+def generate_trace_for_path(
+    path: list[str],
+    nodes_by_id: dict[str, dict],
+    edges_by_pair: dict[tuple[str, str], dict],
+    anomaly_class: str,
     trace_id: str,
-    span_id: str,
-    parent_span_id: str | None,
-    service_name: str,
-    node_type: str,
-    start_time_unix_nano: int,
-    duration_nano: int,
-    status: str,
-) -> Dict:
-    """Build one OTel-compatible span dictionary."""
+) -> list[dict]:
+    spans: list[dict] = []
+    current_time_ms = 0.0
+    parent_span_id: str | None = None
 
-    return {
-        "traceId": trace_id,
-        "spanId": span_id,
-        "parentSpanId": parent_span_id,
-        "serviceName": service_name,
-        "startTimeUnixNano": start_time_unix_nano,
-        "durationNano": duration_nano,
-        "status": status,
-        "attributes": {
+    for i, node_id in enumerate(path):
+        node = nodes_by_id[node_id]
+        edge = edges_by_pair.get((path[i - 1], node_id)) if i > 0 else None
+
+        span_id = uuid4().hex[:16]
+        duration = compute_span_duration(node, edge, anomaly_class, i)
+        status = compute_span_status(node, edge, anomaly_class, duration, i)
+
+        retry_count = 0
+        if anomaly_class == "retry_storm" and status in ("error", "timeout"):
+            retry_count = random.randint(1, 4)
+
+        node_data = get_node_data(node)
+        node_label = str(node_data.get("label", f"service-{i}"))
+        node_type = str(node_data.get("type", "Service"))
+
+        tags = {
             "service.type": node_type,
-        },
-    }
+            "anomaly.class": anomaly_class,
+            "path.position": str(i),
+            "span.retries": str(retry_count),
+        }
+        if status == "error":
+            tags["error"] = "true"
+            tags["error.message"] = f"{node_label} returned 500"
+        if status == "timeout":
+            tags["timeout"] = "true"
+            tags["timeout.threshold_ms"] = "1000"
 
+        span = {
+            "spanId": span_id,
+            "traceId": trace_id,
+            "parentSpanId": parent_span_id,
+            "operationName": node_to_operation(node),
+            "serviceName": node_label,
+            "startTimeMs": round(current_time_ms, 2),
+            "durationMs": round(duration, 2),
+            "status": status,
+            "tags": tags,
+            "logs": [],
+        }
 
-def generate_otel_trace(graph_json: Dict, anomaly_class: str) -> List[Dict]:
-    """Generate synthetic OTel spans by walking the topology."""
-
-    nodes = resolve_nodes(graph_json)
-    node_by_id = {str(node.get("id", "")): node for node in nodes}
-    paths = build_paths(graph_json)
-    rng = make_rng(graph_json, anomaly_class)
-    spans: List[Dict] = []
-    base_start = 1_700_000_000_000_000_000
-
-    failure_flip_tick = rng.randint(1, 4) if anomaly_class == "cascading_failure" else None
-
-    for path_index, path in enumerate(paths):
-        trace_id = f"trace-{graph_json.get('graph_id', 'graph')}-{path_index}"
-        current_start = base_start + path_index * 1_000_000_000
-        parent_span_id: str | None = None
-
-        for hop_index, node_id in enumerate(path):
-            node = node_by_id.get(node_id, {})
-            processing_ms = max(1.0, extract_node_metric(node, "processingPowerMs", 100.0))
-            service_name = extract_node_label(node)
-            node_type = extract_node_type(node)
-            duration_ms = processing_ms
-            status = "STATUS_CODE_OK"
-
-            if anomaly_class == "stable":
-                duration_ms = processing_ms * rng.uniform(0.8, 1.2)
-            elif anomaly_class == "thundering_herd":
-                fan_out = sum(1 for edge in resolve_edges(graph_json) if edge_source(edge) == node_id)
-                multiplier = rng.uniform(10.0, 50.0) if fan_out >= 2 else rng.uniform(1.2, 3.0)
-                duration_ms = processing_ms * multiplier
-            elif anomaly_class == "retry_storm":
-                duration_ms = processing_ms * rng.uniform(1.5, 4.0)
-            elif anomaly_class == "cascading_failure":
-                duration_ms = processing_ms * rng.uniform(0.9, 1.6)
-                if failure_flip_tick is not None and hop_index >= failure_flip_tick:
-                    status = "STATUS_CODE_ERROR"
-
-            span_id = f"span-{path_index}-{hop_index}"
-            duration_nano = int(duration_ms * 1_000_000)
-            spans.append(
-                create_span(
-                    trace_id=trace_id,
-                    span_id=span_id,
-                    parent_span_id=parent_span_id,
-                    service_name=service_name,
-                    node_type=node_type,
-                    start_time_unix_nano=current_start,
-                    duration_nano=duration_nano,
-                    status=status,
-                )
+        if status == "error":
+            span["logs"].append(
+                {
+                    "timestamp": round(current_time_ms + duration * 0.8, 2),
+                    "message": f"ERROR: Request failed at {node_label}",
+                }
             )
 
-            if anomaly_class == "retry_storm":
-                backoff_ms = max(10.0, processing_ms)
-                for retry_index in range(2):
-                    retry_duration_ms = backoff_ms * (2 ** retry_index)
-                    retry_span_id = f"span-{path_index}-{hop_index}-retry-{retry_index}"
-                    retry_start = current_start + duration_nano + int(retry_duration_ms * 1_000_000 * retry_index)
-                    spans.append(
-                        create_span(
-                            trace_id=trace_id,
-                            span_id=retry_span_id,
-                            parent_span_id=parent_span_id,
-                            service_name=service_name,
-                            node_type=node_type,
-                            start_time_unix_nano=retry_start,
-                            duration_nano=int(retry_duration_ms * 1_000_000),
-                            status="STATUS_CODE_ERROR",
-                        )
-                    )
+        spans.append(span)
 
-            parent_span_id = span_id
-            current_start += duration_nano
+        retry_delay = duration
+        for r in range(retry_count):
+            retry_duration = compute_span_duration(node, edge, anomaly_class, i) * 1.2
+            retry_span = {
+                "spanId": uuid4().hex[:16],
+                "traceId": trace_id,
+                "parentSpanId": span_id,
+                "operationName": node_to_operation(node) + ".retry",
+                "serviceName": node_label,
+                "startTimeMs": round(current_time_ms + retry_delay, 2),
+                "durationMs": round(retry_duration, 2),
+                "status": "error" if r < retry_count - 1 else "ok",
+                "tags": {**tags, "retry.attempt": str(r + 1)},
+                "logs": [],
+            }
+            spans.append(retry_span)
+            retry_delay += retry_duration * (2 ** r)
+
+        current_time_ms += duration
+        parent_span_id = span_id
 
     return spans
 
 
-def export_to_jaeger_json(spans: List[Dict]) -> Dict:
-    """Wrap spans in a Jaeger-compatible JSON envelope."""
+def generate_otel_trace(graph: dict, num_traces: int = 3) -> dict:
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    anomaly_class = str(graph.get("label", "stable"))
 
-    if not spans:
-        return {"data": []}
+    nodes_by_id = {
+        str(node.get("id", "")).strip(): node
+        for node in nodes
+        if str(node.get("id", "")).strip()
+    }
+    edges_by_pair = {}
+    for edge in edges:
+        source = edge_source(edge)
+        target = edge_target(edge)
+        if source and target:
+            edges_by_pair[(source, target)] = edge
 
-    trace_id = spans[0]["traceId"]
-    processes: Dict[str, Dict] = {}
-    jaeger_spans: List[Dict] = []
+    adjacency = build_adjacency(nodes, edges)
+    entry_nodes = find_entry_nodes(nodes, edges)
 
-    for span in spans:
-        service_name = span["serviceName"]
-        process_id = f"process-{service_name.replace(' ', '-').lower()}"
-        if process_id not in processes:
-            processes[process_id] = {
-                "serviceName": service_name,
-                "tags": [
-                    {"key": key, "type": "string", "value": str(value)}
-                    for key, value in span["attributes"].items()
-                ],
-            }
+    all_traces = []
+    for trace_num in range(num_traces):
+        trace_id = uuid4().hex[:32]
+        if not entry_nodes:
+            continue
 
-        references = []
-        if span["parentSpanId"]:
-            references.append(
-                {
-                    "refType": "CHILD_OF",
-                    "traceID": trace_id,
-                    "spanID": span["parentSpanId"],
-                }
-            )
+        entry = random.choice(entry_nodes)
+        entry_id = str(entry.get("id", "")).strip()
+        if not entry_id:
+            continue
 
-        jaeger_spans.append(
+        paths = find_all_paths(adjacency, entry_id)
+        paths_sorted = sorted(paths, key=len, reverse=True)
+        path = paths_sorted[trace_num % len(paths_sorted)]
+
+        spans = generate_trace_for_path(
+            path, nodes_by_id, edges_by_pair, anomaly_class, trace_id
+        )
+
+        all_traces.append(
             {
                 "traceID": trace_id,
-                "spanID": span["spanId"],
-                "operationName": f"{service_name}.handle",
-                "references": references,
-                "startTime": span["startTimeUnixNano"] // 1_000,
-                "duration": span["durationNano"] // 1_000,
-                "tags": [
-                    {"key": "otel.status_code", "type": "string", "value": span["status"]},
-                    *[
-                        {"key": key, "type": "string", "value": str(value)}
-                        for key, value in span["attributes"].items()
-                    ],
-                ],
-                "processID": process_id,
-                "warnings": None,
+                "spans": spans,
+                "processes": {
+                    f"p{i}": {"serviceName": str(get_node_data(nodes_by_id[node_id]).get("label", node_id))}
+                    for i, node_id in enumerate(path)
+                    if node_id in nodes_by_id
+                },
             }
         )
 
     return {
-        "data": [
-            {
-                "traceID": trace_id,
-                "spans": jaeger_spans,
-                "processes": processes,
-            }
-        ]
+        "data": all_traces,
+        "total": len(all_traces),
+        "source_graph": graph.get("source", "unknown"),
+        "anomaly_class": anomaly_class,
+        "span_count": sum(len(t["spans"]) for t in all_traces),
     }
 
 
-def iter_graph_files() -> Iterable[Path]:
-    """Yield graph JSON files from the dataset directory."""
-
-    if not GRAPHS_DIR.exists():
-        return []
-    return sorted(path for path in GRAPHS_DIR.rglob("*.json") if path.is_file())
-
-
 def main() -> None:
-    """Generate one sample trace file from the first available graph."""
+    load_dotenv(dotenv_path=ROOT_DIR / ".env")
 
-    graph_files = list(iter_graph_files())
+    graphs_dir = os.getenv("GRAPHS_OUTPUT_DIR", "./data/graphs")
+    traces_dir = os.getenv("TRACES_OUTPUT_DIR", "./data/traces")
+
+    graphs_path = Path(graphs_dir)
+    traces_path = Path(traces_dir)
+    if not graphs_path.is_absolute():
+        graphs_path = (ROOT_DIR / graphs_path).resolve()
+    if not traces_path.is_absolute():
+        traces_path = (ROOT_DIR / traces_path).resolve()
+
+    os.makedirs(traces_path, exist_ok=True)
+
+    if not graphs_path.exists():
+        print("ERROR: No graph files found in", str(graphs_path))
+        sys.exit(1)
+
+    graph_files = [name for name in os.listdir(graphs_path) if name.endswith(".json")]
+
     if not graph_files:
-        raise FileNotFoundError(f"No graph files found in {GRAPHS_DIR}")
+        print("ERROR: No graph files found in", str(graphs_path))
+        sys.exit(1)
 
-    graph_path = graph_files[0]
-    graph_json = json.loads(graph_path.read_text(encoding="utf-8"))
-    anomaly_class = str(graph_json.get("label", "stable")).strip().lower()
-    spans = generate_otel_trace(graph_json, anomaly_class)
-    jaeger_payload = export_to_jaeger_json(spans)
+    total_spans = 0
+    total_traces = 0
+    class_counts: Counter[str] = Counter()
+    processed_graphs = 0
 
-    TRACES_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = TRACES_DIR / f"{graph_path.stem}_{anomaly_class}.json"
-    output_path.write_text(json.dumps(jaeger_payload, ensure_ascii=True, indent=2), encoding="utf-8")
-    print(f"Generated {len(spans)} spans -> {output_path}")
+    for filename in tqdm(graph_files, desc="Synthesizing traces"):
+        graph_path = graphs_path / filename
+        with graph_path.open("r", encoding="utf-8") as handle:
+            graph = json.load(handle)
+
+        if len(graph.get("nodes", [])) < 3:
+            continue
+
+        result = generate_otel_trace(graph, num_traces=3)
+
+        out_filename = filename.replace(".json", "_traces.json")
+        with (traces_path / out_filename).open("w", encoding="utf-8") as handle:
+            json.dump(result, handle, indent=2)
+
+        total_spans += int(result["span_count"])
+        total_traces += int(result["total"])
+        class_counts[str(result["anomaly_class"])] += 1
+        processed_graphs += 1
+
+    print("\nTrace synthesis complete:")
+    print(f"  Graphs processed:  {processed_graphs}")
+    print(f"  Traces generated:  {total_traces}")
+    print(f"  Total spans:       {total_spans}")
+    print(f"  Avg spans/trace:   {total_spans / max(total_traces, 1):.1f}")
+    print(f"  Class breakdown:   {dict(class_counts)}")
+
+    if total_spans / max(total_traces, 1) < 5:
+        print("\nWARNING: Average spans per trace is below 5.")
+        print("Check that your graphs have at least 3 connected nodes.")
 
 
 if __name__ == "__main__":
