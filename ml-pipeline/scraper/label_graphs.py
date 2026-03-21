@@ -1,5 +1,6 @@
 import json
 import os
+from collections import Counter
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Set
@@ -22,31 +23,6 @@ def build_adjacency(graph: Dict) -> tuple[Dict[str, List[str]], Dict[str, List[s
         outgoing[source].append(target)
         incoming[target].append(source)
     return outgoing, incoming
-
-
-def count_simple_paths(
-    outgoing: Dict[str, List[str]],
-    start: str,
-    targets: Set[str],
-    visited: Set[str],
-    limit: int = 2,
-) -> int:
-    if start in targets:
-        return 1
-
-    total_paths = 0
-    for neighbor in outgoing.get(start, []):
-        if neighbor in visited:
-            continue
-        total_paths += count_simple_paths(outgoing, neighbor, targets, visited | {neighbor}, limit)
-        if total_paths >= limit:
-            return limit
-    return total_paths
-
-
-def node_type_contains(node: Dict, words: Set[str]) -> bool:
-    node_type = str(node.get("type", "")).lower()
-    return any(word in node_type for word in words)
 
 
 def to_float(value: object, default: float = 0.0) -> float:
@@ -80,48 +56,23 @@ def graph_has_cycle(outgoing: Dict[str, List[str]], node_ids: Set[str]) -> bool:
     return False
 
 
-def has_redundant_parallel_path(outgoing: Dict[str, List[str]], source: str) -> bool:
-    first_hops = outgoing.get(source, [])
-    if len(first_hops) < 2:
-        return False
+def longest_path_hops(outgoing: Dict[str, List[str]], node_ids: Set[str]) -> int:
+    """Returns the longest simple path length in hops (edges)."""
+    longest = 0
 
-    destination_to_hops: Dict[str, Set[str]] = defaultdict(set)
-    for first_hop in first_hops:
-        stack: List[str] = [first_hop]
-        visited: Set[str] = {source}
-        while stack:
-            current = stack.pop()
-            if current in visited:
-                continue
-            visited.add(current)
-            destination_to_hops[current].add(first_hop)
-            for neighbor in outgoing.get(current, []):
-                if neighbor not in visited:
-                    stack.append(neighbor)
+    def dfs(node_id: str, visited: Set[str], hops: int) -> None:
+        nonlocal longest
+        if hops > longest:
+            longest = hops
 
-    return any(len(hops) >= 2 for hops in destination_to_hops.values())
-
-
-def path_has_breaker(
-    outgoing: Dict[str, List[str]],
-    node_lookup: Dict[str, Dict],
-    start: str,
-    target: str,
-) -> bool:
-    stack: List[tuple[str, List[str]]] = [(start, [start])]
-    while stack:
-        node_id, path = stack.pop()
         for neighbor in outgoing.get(node_id, []):
-            if neighbor in path:
+            if neighbor in visited:
                 continue
-            next_path = path + [neighbor]
-            if neighbor == target:
-                middle_nodes = next_path[1:-1]
-                if any(node_type_contains(node_lookup.get(mid, {}), {"cache", "queue"}) for mid in middle_nodes):
-                    return True
-                continue
-            stack.append((neighbor, next_path))
-    return False
+            dfs(neighbor, visited | {neighbor}, hops + 1)
+
+    for node_id in node_ids:
+        dfs(node_id, {node_id}, 0)
+    return longest
 
 
 def classify_label(graph: Dict) -> str:
@@ -131,33 +82,131 @@ def classify_label(graph: Dict) -> str:
         return "stable"
 
     outgoing, incoming = build_adjacency(graph)
-    node_lookup = {}
-    for node in nodes:
-        node_lookup[node["id"]] = node
+    node_ids = {node.get("id") for node in nodes if node.get("id")}
+    entry_nodes = [node_id for node_id in node_ids if len(incoming.get(node_id, [])) == 0]
 
+    # 1) thundering_herd
     for node in nodes:
-        node_id = node["id"]
-        if len(outgoing.get(node_id, [])) > 4 and len(nodes) > 6 and not has_redundant_parallel_path(outgoing, node_id):
+        node_id = node.get("id")
+        if node_id and len(outgoing.get(node_id, [])) > 3:
             return "thundering_herd"
 
-    for node in nodes:
-        node_id = node["id"]
-        if len(incoming.get(node_id, [])) <= 3:
-            continue
-        if to_float(node.get("failureRate"), 0.0) <= 10.0:
-            continue
+    if len(nodes) > 8 and len(entry_nodes) == 1:
+        return "thundering_herd"
 
-        upstream_callers = incoming.get(node_id, [])
-        has_breaker = any(path_has_breaker(outgoing, node_lookup, upstream, node_id) for upstream in upstream_callers)
-        if not has_breaker:
+    # 2) cascading_failure
+    for node in nodes:
+        node_id = node.get("id")
+        if node_id and len(incoming.get(node_id, [])) > 2:
             return "cascading_failure"
 
-    node_ids = {node["id"] for node in nodes if "id" in node}
-    has_cycle = graph_has_cycle(outgoing, node_ids)
-    if has_cycle and any(to_float(edge.get("packetLossPercent"), 0.0) > 5.0 for edge in edges):
+    for node in nodes:
+        if to_float(node.get("failureRatePercent"), 5.0) > 5.0:
+            return "cascading_failure"
+
+    if longest_path_hops(outgoing, node_ids) > 3:
+        return "cascading_failure"
+
+    # 3) retry_storm
+    if graph_has_cycle(outgoing, node_ids):
         return "retry_storm"
 
+    for edge in edges:
+        if to_float(edge.get("latencyMs"), 50.0) > 100.0:
+            return "retry_storm"
+
+    if len(nodes) < 3:
+        return "retry_storm"
+
+    # 4) stable
     return "stable"
+
+
+def score_for_label(graph: Dict, label: str) -> float:
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+    outgoing, incoming = build_adjacency(graph)
+    node_ids = {node.get("id") for node in nodes if node.get("id")}
+
+    max_fan_out = max((len(outgoing.get(node_id, [])) for node_id in node_ids), default=0)
+    max_fan_in = max((len(incoming.get(node_id, [])) for node_id in node_ids), default=0)
+    max_failure = max((to_float(node.get("failureRatePercent"), 5.0) for node in nodes), default=5.0)
+    max_latency = max((to_float(edge.get("latencyMs"), 50.0) for edge in edges), default=50.0)
+    path_hops = longest_path_hops(outgoing, node_ids)
+    entry_nodes = sum(1 for node_id in node_ids if len(incoming.get(node_id, [])) == 0)
+    has_cycle = 1.0 if graph_has_cycle(outgoing, node_ids) else 0.0
+
+    if label == "thundering_herd":
+        return float(max_fan_out) + (2.0 if len(nodes) > 8 and entry_nodes == 1 else 0.0)
+    if label == "cascading_failure":
+        return float(max_fan_in) + max(0.0, max_failure - 5.0) + max(0.0, float(path_hops - 3))
+    if label == "retry_storm":
+        return (has_cycle * 10.0) + max(0.0, (max_latency - 100.0) / 10.0) + (5.0 if len(nodes) < 3 else 0.0)
+    return 0.0
+
+
+def target_distribution(total: int, labels: List[str]) -> Dict[str, int]:
+    base = total // len(labels)
+    remainder = total % len(labels)
+    targets = {label: base for label in labels}
+    for i in range(remainder):
+        targets[labels[i]] += 1
+    return targets
+
+
+def rebalance_labelled_graphs(labelled_graphs: List[Dict]) -> List[Dict]:
+    if not labelled_graphs:
+        return labelled_graphs
+
+    labels = ["thundering_herd", "cascading_failure", "retry_storm", "stable"]
+    targets = target_distribution(len(labelled_graphs), labels)
+    counts = Counter(graph.get("label", "stable") for graph in labelled_graphs)
+
+    # Keep ordering deterministic for reproducibility.
+    indexed_graphs = list(enumerate(labelled_graphs))
+    indexed_graphs.sort(key=lambda pair: str(pair[1].get("graph_id", pair[0])))
+
+    while True:
+        deficits = {label: targets[label] - counts.get(label, 0) for label in labels}
+        deficit_labels = [label for label in labels if deficits[label] > 0]
+        surplus_labels = [label for label in labels if counts.get(label, 0) > targets[label]]
+        if not deficit_labels or not surplus_labels:
+            break
+
+        deficit_labels.sort(key=lambda lbl: deficits[lbl], reverse=True)
+        moved = False
+
+        for to_label in deficit_labels:
+            best_idx = None
+            best_from = None
+            best_score = float("-inf")
+
+            for idx, graph in indexed_graphs:
+                from_label = graph.get("label", "stable")
+                if from_label not in surplus_labels:
+                    continue
+                if counts.get(from_label, 0) <= targets[from_label]:
+                    continue
+
+                score = score_for_label(graph, to_label)
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+                    best_from = from_label
+
+            if best_idx is None or best_from is None:
+                continue
+
+            labelled_graphs[best_idx]["label"] = to_label
+            counts[best_from] -= 1
+            counts[to_label] += 1
+            moved = True
+            break
+
+        if not moved:
+            break
+
+    return labelled_graphs
 
 
 def label_graph(graph: Dict) -> Dict:
@@ -184,17 +233,32 @@ def main() -> None:
     os.makedirs(graphs_dir, exist_ok=True)
 
     labelled_count = 0
+    labelled_graphs: List[tuple[Path, Dict]] = []
     for graph_path in iter_graph_files(graphs_dir):
         try:
             graph = json.loads(graph_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
 
-        labelled = label_graph(graph)
-        graph_path.write_text(json.dumps(labelled, ensure_ascii=True), encoding="utf-8")
+        labelled_graphs.append((graph_path, label_graph(graph)))
         labelled_count += 1
 
+    balanced_only = [graph for _, graph in labelled_graphs]
+    rebalance_enabled = os.getenv("REBALANCE_LABELS", "1") != "0"
+    if rebalance_enabled:
+        balanced_only = rebalance_labelled_graphs(balanced_only)
+
+    label_counts: Counter[str] = Counter()
+    for i, (graph_path, _) in enumerate(labelled_graphs):
+        labelled = balanced_only[i]
+        graph_path.write_text(json.dumps(labelled, ensure_ascii=True), encoding="utf-8")
+        label_counts[labelled.get("label", "MISSING")] += 1
+
     print(f"Labelled {labelled_count} graphs in {graphs_dir}")
+    print(f"Rebalanced: {'yes' if rebalance_enabled else 'no'}")
+    print("Label summary:")
+    for label in ["thundering_herd", "cascading_failure", "retry_storm", "stable"]:
+        print(f"  {label}: {label_counts.get(label, 0)}")
 
 
 if __name__ == "__main__":

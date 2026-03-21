@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import random
@@ -34,16 +35,63 @@ def iter_graphs(path: Path) -> Iterable[Dict]:
 
 
 def make_rng(graph: Dict, salt: str) -> random.Random:
-    seed_material = f"{graph.get('graph_id', '')}:{salt}"
+    graph_id = graph.get("graph_id")
+    if not graph_id:
+        stable_blob = json.dumps(graph, sort_keys=True, ensure_ascii=True)
+        graph_id = hashlib.sha1(stable_blob.encode("utf-8")).hexdigest()[:12]
+    seed_material = f"{graph_id}:{salt}"
     return random.Random(seed_material)
 
 
-def rehydrate_graph(labelled_graph: Dict) -> Dict:
+def normalize_node_type(raw_type: str) -> str:
+    lowered = str(raw_type or "").lower()
+    if any(token in lowered for token in {"postgres", "mysql", "mongo", "database", "db"}):
+        return "database"
+    if any(token in lowered for token in {"cache", "redis"}):
+        return "cache"
+    if any(token in lowered for token in {"gateway", "proxy", "nginx", "lb", "load_balancer"}):
+        return "load_balancer"
+    if any(token in lowered for token in {"compute", "service", "frontend", "ui"}):
+        return "compute"
+    return "compute"
+
+
+def normalize_node(node: Dict) -> Dict:
+    data = node.get("data", {}) if isinstance(node.get("data", {}), dict) else {}
+    node_id = node.get("id")
+    label = data.get("label") or node.get("label") or str(node_id)
+    raw_type = node.get("type") or data.get("type") or "Service"
     return {
-        "graph_id": labelled_graph["graph_id"],
-        "source_repo": labelled_graph.get("source_repo", "unknown"),
-        "nodes": copy.deepcopy(labelled_graph.get("nodes", [])),
-        "edges": copy.deepcopy(labelled_graph.get("edges", [])),
+        "id": node_id,
+        "type": normalize_node_type(str(raw_type)),
+        "label": label,
+    }
+
+
+def normalize_edge(edge: Dict) -> Dict:
+    source = edge.get("from") or edge.get("source")
+    target = edge.get("to") or edge.get("target")
+    return {
+        "from": source,
+        "to": target,
+        "latencyMs": edge.get("latencyMs", 50),
+        "packetLossPercent": edge.get("packetLossPercent", 1),
+    }
+
+
+def rehydrate_graph(labelled_graph: Dict) -> Dict:
+    graph_id = labelled_graph.get("graph_id")
+    if not graph_id:
+        source = labelled_graph.get("source", "benchmark")
+        stable_blob = json.dumps(labelled_graph, sort_keys=True, ensure_ascii=True)
+        digest = hashlib.sha1(stable_blob.encode("utf-8")).hexdigest()[:10]
+        graph_id = f"{source}_{digest}"
+
+    return {
+        "graph_id": graph_id,
+        "source_repo": labelled_graph.get("source_repo", labelled_graph.get("source", "unknown")),
+        "nodes": [normalize_node(node) for node in copy.deepcopy(labelled_graph.get("nodes", []))],
+        "edges": [normalize_edge(edge) for edge in copy.deepcopy(labelled_graph.get("edges", []))],
         "label": labelled_graph.get("label", "stable"),
     }
 
