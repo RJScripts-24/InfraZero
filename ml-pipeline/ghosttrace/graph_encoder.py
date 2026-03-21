@@ -12,12 +12,13 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch_geometric.data import Data, Dataset
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GraphConv, global_mean_pool
+from torch_geometric.nn import GATv2Conv, global_max_pool, global_mean_pool
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_GRAPH_DIR = (ROOT_DIR / "data" / "graphs").resolve()
 MODEL_OUTPUT_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn.pt"
+BEST_MODEL_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn_best.pt"
 
 LABEL_TO_INDEX = {
     "cascading_failure": 0,
@@ -196,15 +197,17 @@ def graph_to_data(graph: Dict) -> Data:
 
 
 class GhostTraceGNN(nn.Module):
-    """Two-layer GCN that produces a graph-level embedding."""
+    """Three-layer GATv2 encoder that produces a graph-level embedding."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.conv1 = GraphConv(8, 64)
-        self.conv2 = GraphConv(64, 32)
+        self.conv1 = GATv2Conv(8, 64, heads=2, concat=True)
+        self.conv2 = GATv2Conv(128, 64, heads=2, concat=True)
+        self.conv3 = GATv2Conv(128, 32, heads=1, concat=False)
+        self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, data: Data) -> torch.Tensor:
-        """Encode a graph into a single 32-dimensional embedding."""
+        """Encode a graph into a single 64-dimensional embedding."""
 
         x, edge_index = data.x, data.edge_index
         batch = getattr(data, "batch", None)
@@ -212,10 +215,18 @@ class GhostTraceGNN(nn.Module):
             batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
 
         x = self.conv1(x, edge_index)
-        x = F.relu(x)
+        x = F.elu(x)
+        x = self.dropout(x)
         x = self.conv2(x, edge_index)
-        x = F.relu(x)
-        return global_mean_pool(x, batch)
+        x = F.elu(x)
+        x = self.dropout(x)
+        x = self.conv3(x, edge_index)
+        x = F.elu(x)
+
+        # Concatenate mean and max graph pooling for both average and peak signals.
+        pooled_mean = global_mean_pool(x, batch)
+        pooled_max = global_max_pool(x, batch)
+        return torch.cat([pooled_mean, pooled_max], dim=1)
 
 
 class GraphDataset(Dataset):
@@ -247,7 +258,12 @@ class GraphClassifier(nn.Module):
     def __init__(self, encoder: GhostTraceGNN, num_classes: int) -> None:
         super().__init__()
         self.encoder = encoder
-        self.head = nn.Linear(32, num_classes)
+        self.head = nn.Sequential(
+            nn.Linear(64, 32),
+            nn.ELU(),
+            nn.Dropout(p=0.2),
+            nn.Linear(32, num_classes),
+        )
 
     def forward(self, data: Data) -> torch.Tensor:
         """Return classification logits."""
@@ -304,10 +320,15 @@ def train() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     encoder = GhostTraceGNN()
     model = GraphClassifier(encoder, num_classes=len(LABEL_TO_INDEX)).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
     criterion = nn.CrossEntropyLoss()
+    best_val_accuracy = 0.0
+    best_epoch = 0
+    epochs_without_improvement = 0
+    patience = 20
 
-    for epoch in range(1, 51):
+    for epoch in range(1, 151):
         model.train()
         running_loss = 0.0
         batches = 0
@@ -325,7 +346,24 @@ def train() -> None:
 
         avg_loss = running_loss / batches if batches else 0.0
         val_accuracy = evaluate(model, val_loader, device)
+        scheduler.step()
+
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_epoch = epoch
+            epochs_without_improvement = 0
+            torch.save(model.state_dict(), BEST_MODEL_PATH)
+        else:
+            epochs_without_improvement += 1
+
         print(f"Epoch {epoch:02d} | loss={avg_loss:.4f} | val_accuracy={val_accuracy:.4f}")
+
+        if epochs_without_improvement >= patience:
+            print(f"Early stopping at epoch {epoch:02d} (no improvement for {patience} epochs)")
+            break
+
+    if BEST_MODEL_PATH.exists():
+        model.load_state_dict(torch.load(BEST_MODEL_PATH, map_location=device))
 
     torch.save(
         {
@@ -335,6 +373,8 @@ def train() -> None:
         },
         MODEL_OUTPUT_PATH,
     )
+    print(f"Best val_accuracy: {best_val_accuracy:.4f} at epoch {best_epoch}")
+    print(f"Saved best checkpoint to {BEST_MODEL_PATH}")
     print(f"Saved model to {MODEL_OUTPUT_PATH}")
 
 
