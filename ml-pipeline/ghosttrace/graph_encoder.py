@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence
 
@@ -19,6 +20,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_GRAPH_DIR = (ROOT_DIR / "data" / "graphs").resolve()
 MODEL_OUTPUT_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn.pt"
 BEST_MODEL_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn_best.pt"
+TRAINING_HISTORY_PATH = Path(__file__).resolve().parent / "training_history.json"
 
 LABEL_TO_INDEX = {
     "cascading_failure": 0,
@@ -327,8 +329,12 @@ def train() -> None:
     best_epoch = 0
     epochs_without_improvement = 0
     patience = 20
+    train_losses: List[float] = []
+    val_accuracies: List[float] = []
+    last_epoch = 0
 
     for epoch in range(1, 151):
+        last_epoch = epoch
         model.train()
         running_loss = 0.0
         batches = 0
@@ -346,6 +352,8 @@ def train() -> None:
 
         avg_loss = running_loss / batches if batches else 0.0
         val_accuracy = evaluate(model, val_loader, device)
+        train_losses.append(avg_loss)
+        val_accuracies.append(val_accuracy)
         scheduler.step()
 
         if val_accuracy > best_val_accuracy:
@@ -373,9 +381,21 @@ def train() -> None:
         },
         MODEL_OUTPUT_PATH,
     )
+
+    history = {
+        "epochs": list(range(1, last_epoch + 1)),
+        "train_loss": train_losses,
+        "val_accuracy": val_accuracies,
+        "best_epoch": best_epoch,
+        "best_val_accuracy": best_val_accuracy,
+    }
+    with open(os.path.join(os.path.dirname(__file__), "training_history.json"), "w", encoding="utf-8") as f:
+        json.dump(history, f, indent=2)
+
     print(f"Best val_accuracy: {best_val_accuracy:.4f} at epoch {best_epoch}")
     print(f"Saved best checkpoint to {BEST_MODEL_PATH}")
     print(f"Saved model to {MODEL_OUTPUT_PATH}")
+    print(f"Saved training history to {TRAINING_HISTORY_PATH}")
 
 
 if __name__ == "__main__":

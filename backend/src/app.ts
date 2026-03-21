@@ -16,6 +16,7 @@ import authRoutes from './routes/auth.routes';
 import projectsRoutes from './routes/projects.routes';
 import simulationsRoutes from './routes/simulations.routes';
 import ghosttraceRoutes from './routes/ghosttrace.routes';
+import broachroomRoutes from './routes/breachroom.routes';
 
 // Middlewares & Sockets
 import { errorHandler } from './middlewares/errorHandler';
@@ -59,6 +60,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/simulations', simulationsRoutes);
 app.use('/api/ghosttrace', ghosttraceRoutes);
+app.use('/api/breachroom', broachroomRoutes);
 
 // Contract-first v1 routes (preferred by frontend API contract)
 app.use('/v1/health', healthRoutes);
@@ -67,6 +69,7 @@ app.use('/v1/projects', projectsRoutes);
 app.use('/v1/ai', aiRoutes);
 app.use('/v1/simulations', simulationsRoutes);
 app.use('/v1/ghosttrace', ghosttraceRoutes);
+app.use('/v1/breachroom', broachroomRoutes);
 
 /**
  * 5. Global Error Handling

@@ -13,7 +13,9 @@ import {
   Terminal,
   Zap,
   Ghost,
+  ShieldAlert,
 } from 'lucide-react';
+import { useLoaderData } from 'react-router';
 import {
   addEdge,
   useNodesState,
@@ -26,10 +28,14 @@ import {
 import '@xyflow/react/dist/style.css';
 import { FlowCanvas } from '../components/FlowCanvas';
 import { GhostTracePanel } from '../components/GhostTracePanel';
+import { BreachRoomImportModal, type IncidentTimeline } from '../components/BreachRoomImportModal';
+import { BreachRoomPanel, type BreachRoomResult } from '../components/BreachRoomPanel';
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
 import { ReportView } from '../components/ReportView';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
 import { initCollaboration, destroyCollaboration, setLocalUser, setLocalCursor } from '../../lib/collaboration';
+import type { WorkspaceLoaderData } from '../routes';
 import * as Y from 'yjs';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -196,6 +202,7 @@ interface GhostTraceResult {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
+  const loaderData = useLoaderData() as WorkspaceLoaderData;
   const [projectName, setProjectName]     = useState(() => {
     const roomFromUrl = new URLSearchParams(window.location.search).get('room');
     return roomFromUrl?.trim() || 'velocis-architecture-v3';
@@ -220,6 +227,12 @@ export default function WorkspacePage() {
   const [ghostTraceResult, setGhostTraceResult] = useState<GhostTraceResult | null>(null);
   const [ghostTraceLoading, setGhostTraceLoading] = useState(false);
   const [ghostPanelOpen, setGhostPanelOpen] = useState(false);
+  const [breachRoomResult, setBreachRoomResult] = useState<BreachRoomResult | null>(null);
+  const [breachRoomLoading, setBreachRoomLoading] = useState(false);
+  const [breachPanelOpen, setBreachPanelOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [incidentTimeline, setIncidentTimeline] = useState<IncidentTimeline | null>(null);
+  const [replayTick, setReplayTick] = useState(0);
   const [ghostTraceRisks, setGhostTraceRisks] = useState<{ edgeRisks: EdgeRiskScore[]; nodeRisks: NodeRiskScore[] }>({
     edgeRisks: [],
     nodeRisks: [],
@@ -586,6 +599,28 @@ export default function WorkspacePage() {
     window.history.replaceState({}, '', url.toString());
   }, [projectName]);
 
+  useEffect(() => {
+    if (!loaderData?.autoOpenBreachRoom) {
+      return;
+    }
+    setBreachPanelOpen(true);
+  }, [loaderData?.autoOpenBreachRoom]);
+
+  useEffect(() => {
+    if (!incidentTimeline) return;
+    const eventsUpToTick = incidentTimeline.events.filter((_, i) => i <= replayTick);
+    const affectedNow = new Set(eventsUpToTick.map((event) => event.affectedNodeId));
+
+    setNodes((nds) => nds.map((node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        breachAffected: affectedNow.has(node.id),
+        breachSeverity: eventsUpToTick.find((event) => event.affectedNodeId === node.id)?.severity,
+      },
+    })));
+  }, [replayTick, incidentTimeline, setNodes]);
+
   const handleKillNode = (nodeId: string) => {
     setChaosEvents(prev => [...prev, {
       event_id: `kill-${nodeId}-${Date.now()}`,
@@ -758,6 +793,82 @@ export default function WorkspacePage() {
     }
   };
 
+  const runBreachRoomAnalysis = async (timeline: IncidentTimeline) => {
+    if (!ghostTraceResult) {
+      setLogs((prev) => [...prev, '[BREACHROOM] Run GhostTrace before incident recall analysis.']);
+      setTerminalExpanded(true);
+      return;
+    }
+
+    setBreachRoomLoading(true);
+    setBreachPanelOpen(true);
+    setImportModalOpen(false);
+
+    try {
+      const cleanGraph = sanitizeGraph(nodes, edges);
+      const response = await authFetch('/api/breachroom/analyze', {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+          nodes: cleanGraph.nodes,
+          edges: cleanGraph.edges,
+          ghostTraceResult,
+          incidentSource: timeline.source,
+          manualEvents: timeline.events,
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || payload?.error || 'BreachRoom analysis failed.');
+      }
+
+      const rawResult = (payload?.result || payload) as Partial<BreachRoomResult> & {
+        analysisNarrative?: string;
+      };
+      const rawRecall = rawResult.recallScore || ({} as BreachRoomResult['recallScore']);
+      const result: BreachRoomResult = {
+        recallScore: {
+          ...rawRecall,
+          recall: rawRecall.recall ?? 0,
+          precision: rawRecall.precision ?? 0,
+          f1Score: rawRecall.f1Score ?? 0,
+          truePositives: rawRecall.truePositives ?? 0,
+          falseNegatives: rawRecall.falseNegatives ?? 0,
+          actualAffectedEdges: rawRecall.actualAffectedEdges ?? [],
+          predictedEdgeRisks: rawRecall.predictedEdgeRisks?.length
+            ? rawRecall.predictedEdgeRisks
+            : ghostTraceResult.edgeRisks.map((edgeRisk) => ({
+                edgeId: edgeRisk.edgeId,
+                riskScore: edgeRisk.riskScore,
+              })),
+        },
+        revisionSuggestions: rawResult.revisionSuggestions || [],
+        aiNarrative: rawResult.aiNarrative || rawResult.analysisNarrative || '',
+      };
+      setBreachRoomResult(result);
+      setIncidentTimeline(timeline);
+      setReplayTick(0);
+      setNodes((nds) => nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          breachAffected: timeline.affectedNodeIds.includes(String(node.id)),
+        },
+      })));
+
+      setLogs((prev) => [
+        ...prev,
+        `[BREACHROOM] Recall ${(result.recallScore.recall * 100).toFixed(0)}% | Precision ${(result.recallScore.precision * 100).toFixed(0)}%.`,
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown BreachRoom error';
+      setLogs((prev) => [...prev, `[BREACHROOM ERROR] ${message}`]);
+    } finally {
+      setBreachRoomLoading(false);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col relative overflow-hidden" style={{ backgroundColor: '#000000', fontFamily: 'Inter, sans-serif' }}>
       
@@ -880,6 +991,28 @@ export default function WorkspacePage() {
               <Ghost size={14} />
               GhostTrace
             </motion.button>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <motion.button
+                    whileHover={{ scale: ghostTraceResult ? 1.02 : 1 }}
+                    whileTap={{ scale: ghostTraceResult ? 0.98 : 1 }}
+                    onClick={() => setImportModalOpen(true)}
+                    disabled={!ghostTraceResult}
+                    className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-red-100 shadow-xl transition-all hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <ShieldAlert size={14} />
+                    BreachRoom
+                  </motion.button>
+                </span>
+              </TooltipTrigger>
+              {!ghostTraceResult && (
+                <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
+                  Run GhostTrace first
+                </TooltipContent>
+              )}
+            </Tooltip>
 
             <button
               onClick={() => setSimulationMode((prev) => (prev === 'deterministic' ? 'randomized' : 'deterministic'))}
@@ -1048,6 +1181,18 @@ export default function WorkspacePage() {
               />
             )}
           </AnimatePresence>
+
+          <BreachRoomPanel
+            isOpen={breachPanelOpen}
+            onClose={() => setBreachPanelOpen(false)}
+            result={breachRoomResult}
+            isLoading={breachRoomLoading}
+            nodes={nodes}
+            timeline={incidentTimeline}
+            currentReplayTick={replayTick}
+            onTickChange={(tick) => setReplayTick(tick)}
+            totalTicks={Math.max((incidentTimeline?.events.length ?? 1) - 1, 0)}
+          />
 
           {/* Canvas Labels / Overlays */}
           <div className="absolute bottom-8 left-8 z-30 pointer-events-none opacity-40 select-none">
@@ -1225,6 +1370,14 @@ export default function WorkspacePage() {
         isOpen={isImportPopupOpen}
         onClose={() => setIsImportPopupOpen(false)}
         onImport={handleImportDiagram}
+      />
+
+      <BreachRoomImportModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImport={(timeline) => {
+          void runBreachRoomAnalysis(timeline);
+        }}
       />
 
       <ReportView

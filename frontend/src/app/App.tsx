@@ -1,6 +1,7 @@
 import { RouterProvider } from 'react-router';
 import { router } from './routes';
 import { getUser, isLoggedIn } from '../lib/auth';
+import { Toaster } from './components/ui/sonner';
 
 export default function App() {
   const path = window.location.pathname;
@@ -13,5 +14,10 @@ export default function App() {
     return null;
   }
 
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <Toaster />
+    </>
+  );
 }

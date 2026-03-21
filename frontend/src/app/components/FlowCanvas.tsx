@@ -55,22 +55,44 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
   const metricIsOverloaded = Boolean(nodeMetric?.isOverloaded ?? nodeMetric?.is_overloaded);
   const metricQueueDepth = Number(nodeMetric?.queueDepth ?? nodeMetric?.queue_depth ?? 0);
   const ghostRisk = typeof data.ghostRisk === 'number' ? data.ghostRisk : undefined;
+  const breachAffected = Boolean(data.breachAffected);
+  const breachSeverity = String(data.breachSeverity ?? '').toLowerCase();
   const hasSimulationSnapshots = (data.simulationSnapshots?.length ?? 0) > 0;
-  const showGhostRisk = typeof ghostRisk === 'number' && !hasSimulationSnapshots;
+  const showGhostRisk = typeof ghostRisk === 'number' && !hasSimulationSnapshots && !breachAffected;
 
   const nodeColor = useMemo(() => {
-    if (!nodeMetric) return 'rgba(59,130,246,0.15)';
-    if (metricState === 'dead' || metricState === 'failed' || metricIsOverloaded) return 'rgba(239,68,68,0.25)';
-    if (metricErrorRate > 0.1 || metricState === 'degraded' || metricState === 'restarting') return 'rgba(245,158,11,0.25)';
-    return 'rgba(16,185,129,0.20)';
-  }, [nodeMetric, metricState, metricErrorRate, metricIsOverloaded]);
+    if (nodeMetric) {
+      if (metricState === 'dead' || metricState === 'failed' || metricIsOverloaded) return 'rgba(239,68,68,0.25)';
+      if (metricErrorRate > 0.1 || metricState === 'degraded' || metricState === 'restarting') return 'rgba(245,158,11,0.25)';
+      return 'rgba(16,185,129,0.20)';
+    }
+
+    if (breachAffected) {
+      if (breachSeverity === 'critical') return 'rgba(239,68,68,0.24)';
+      if (breachSeverity === 'high') return 'rgba(239,68,68,0.18)';
+      if (breachSeverity === 'medium') return 'rgba(245,158,11,0.18)';
+      return 'rgba(245,158,11,0.12)';
+    }
+
+    return 'rgba(59,130,246,0.15)';
+  }, [nodeMetric, metricState, metricErrorRate, metricIsOverloaded, breachAffected, breachSeverity]);
 
   const nodeBorderColor = useMemo(() => {
-    if (!nodeMetric) return 'rgba(59,130,246,0.4)';
-    if (metricState === 'dead' || metricState === 'failed' || metricIsOverloaded) return 'rgba(239,68,68,0.8)';
-    if (metricErrorRate > 0.1 || metricState === 'degraded' || metricState === 'restarting') return 'rgba(245,158,11,0.8)';
-    return 'rgba(16,185,129,0.6)';
-  }, [nodeMetric, metricState, metricErrorRate, metricIsOverloaded]);
+    if (nodeMetric) {
+      if (metricState === 'dead' || metricState === 'failed' || metricIsOverloaded) return 'rgba(239,68,68,0.8)';
+      if (metricErrorRate > 0.1 || metricState === 'degraded' || metricState === 'restarting') return 'rgba(245,158,11,0.8)';
+      return 'rgba(16,185,129,0.6)';
+    }
+
+    if (breachAffected) {
+      if (breachSeverity === 'critical') return 'rgba(239,68,68,0.95)';
+      if (breachSeverity === 'high') return 'rgba(239,68,68,0.8)';
+      if (breachSeverity === 'medium') return 'rgba(245,158,11,0.85)';
+      return 'rgba(245,158,11,0.5)';
+    }
+
+    return 'rgba(59,130,246,0.4)';
+  }, [nodeMetric, metricState, metricErrorRate, metricIsOverloaded, breachAffected, breachSeverity]);
 
   let statusColor = '#3F3F46'; // Zinc-600
   if (data.isActive)     statusColor = '#3B82F6';
@@ -92,6 +114,7 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
   const combinedShadow = showGhostRisk && ghostRisk > 0.6
     ? `${shadow}, 0 0 12px rgba(245,158,11,0.6)`
     : shadow;
+  const showCriticalBreachPulse = breachAffected && breachSeverity === 'critical' && !nodeMetric;
 
   const hs = hovered ? handleVisible : handleHidden;
   const nodeClassName = [
@@ -128,6 +151,10 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
 
       {metricIsOverloaded && (
         <div className="absolute inset-0 rounded-2xl animate-ping border-2 border-red-500/40 pointer-events-none" />
+      )}
+
+      {showCriticalBreachPulse && (
+        <div className="absolute inset-0 rounded-2xl animate-ping border-2 border-red-500/50 pointer-events-none" />
       )}
 
       {/* Subtle blue top-edge highlight */}
