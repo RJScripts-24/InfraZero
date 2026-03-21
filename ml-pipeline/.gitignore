@@ -1,0 +1,55 @@
+# -- Environment & Secrets ------------------
+.env
+.env.local
+.env.*.local
+
+# -- Scraped & Generated Data ---------------
+# These can be gigabytes - never commit raw scraped data
+data/
+data/raw/
+data/graphs/
+data/traces/
+data/augmented/
+data/splits/
+
+# -- Trained ML Models ---------------------
+# Model weights can be hundreds of MB
+*.pt
+*.pth
+*.ckpt
+*.pkl
+*.joblib
+ghosttrace/*.pt
+ghosttrace/*.pth
+
+# -- Python Cache & Virtualenvs ------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# -- Jupyter Notebooks (if added later) ----
+.ipynb_checkpoints/
+*.ipynb
+
+# -- Node (for ml-pipeline/collect/) -------
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# -- OS & Editor Junk ----------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

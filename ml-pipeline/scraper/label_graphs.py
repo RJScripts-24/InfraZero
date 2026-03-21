@@ -1,12 +1,14 @@
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Set
 
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT_DIR / "data"
-PARSED_PATH = DATA_DIR / "parsed_graphs.jsonl"
-LABELLED_PATH = DATA_DIR / "labelled_graphs.jsonl"
 
 
 def build_adjacency(graph: Dict) -> tuple[Dict[str, List[str]], Dict[str, List[str]]]:
@@ -42,124 +44,157 @@ def count_simple_paths(
     return total_paths
 
 
-def detect_anti_patterns(graph: Dict) -> List[str]:
+def node_type_contains(node: Dict, words: Set[str]) -> bool:
+    node_type = str(node.get("type", "")).lower()
+    return any(word in node_type for word in words)
+
+
+def to_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def graph_has_cycle(outgoing: Dict[str, List[str]], node_ids: Set[str]) -> bool:
+    visiting: Set[str] = set()
+    visited: Set[str] = set()
+
+    def dfs(node_id: str) -> bool:
+        if node_id in visiting:
+            return True
+        if node_id in visited:
+            return False
+
+        visiting.add(node_id)
+        for neighbor in outgoing.get(node_id, []):
+            if dfs(neighbor):
+                return True
+        visiting.remove(node_id)
+        visited.add(node_id)
+        return False
+
+    for node_id in node_ids:
+        if dfs(node_id):
+            return True
+    return False
+
+
+def has_redundant_parallel_path(outgoing: Dict[str, List[str]], source: str) -> bool:
+    first_hops = outgoing.get(source, [])
+    if len(first_hops) < 2:
+        return False
+
+    destination_to_hops: Dict[str, Set[str]] = defaultdict(set)
+    for first_hop in first_hops:
+        stack: List[str] = [first_hop]
+        visited: Set[str] = {source}
+        while stack:
+            current = stack.pop()
+            if current in visited:
+                continue
+            visited.add(current)
+            destination_to_hops[current].add(first_hop)
+            for neighbor in outgoing.get(current, []):
+                if neighbor not in visited:
+                    stack.append(neighbor)
+
+    return any(len(hops) >= 2 for hops in destination_to_hops.values())
+
+
+def path_has_breaker(
+    outgoing: Dict[str, List[str]],
+    node_lookup: Dict[str, Dict],
+    start: str,
+    target: str,
+) -> bool:
+    stack: List[tuple[str, List[str]]] = [(start, [start])]
+    while stack:
+        node_id, path = stack.pop()
+        for neighbor in outgoing.get(node_id, []):
+            if neighbor in path:
+                continue
+            next_path = path + [neighbor]
+            if neighbor == target:
+                middle_nodes = next_path[1:-1]
+                if any(node_type_contains(node_lookup.get(mid, {}), {"cache", "queue"}) for mid in middle_nodes):
+                    return True
+                continue
+            stack.append((neighbor, next_path))
+    return False
+
+
+def classify_label(graph: Dict) -> str:
     nodes = graph.get("nodes", [])
     edges = graph.get("edges", [])
     if not nodes:
-        return ["CLEAN"]
+        return "stable"
 
     outgoing, incoming = build_adjacency(graph)
-    nodes_by_type: Dict[str, List[Dict]] = defaultdict(list)
     node_lookup = {}
     for node in nodes:
-        node_type = node.get("type", "compute")
-        nodes_by_type[node_type].append(node)
         node_lookup[node["id"]] = node
-
-    anti_patterns: List[str] = []
 
     for node in nodes:
         node_id = node["id"]
-        node_type = node.get("type", "compute")
-        if len(incoming.get(node_id, [])) >= 3 and len(nodes_by_type[node_type]) == 1:
-            anti_patterns.append("SPOF")
-            break
+        if len(outgoing.get(node_id, [])) > 4 and len(nodes) > 6 and not has_redundant_parallel_path(outgoing, node_id):
+            return "thundering_herd"
 
-    has_database = bool(nodes_by_type.get("database"))
-    has_cache = bool(nodes_by_type.get("cache"))
-    if has_database and not has_cache:
-        anti_patterns.append("THUNDERING_HERD")
+    for node in nodes:
+        node_id = node["id"]
+        if len(incoming.get(node_id, [])) <= 3:
+            continue
+        if to_float(node.get("failureRate"), 0.0) <= 10.0:
+            continue
 
-    source_ids = {
-        node["id"]
-        for node in nodes
-        if node.get("type") in {"client", "load_balancer"}
-    }
-    database_ids = {
-        node["id"]
-        for node in nodes
-        if node.get("type") == "database"
-    }
-    if source_ids and database_ids:
-        total_paths = 0
-        for source_id in source_ids:
-            total_paths += count_simple_paths(outgoing, source_id, database_ids, {source_id})
-            if total_paths >= 2:
-                break
-        if total_paths <= 1:
-            anti_patterns.append("NO_REDUNDANCY")
+        upstream_callers = incoming.get(node_id, [])
+        has_breaker = any(path_has_breaker(outgoing, node_lookup, upstream, node_id) for upstream in upstream_callers)
+        if not has_breaker:
+            return "cascading_failure"
 
-    compute_count = len(nodes_by_type.get("compute", []))
-    load_balancer_count = len(nodes_by_type.get("load_balancer", []))
-    if compute_count >= 2 and load_balancer_count == 0:
-        anti_patterns.append("MISSING_LB")
+    node_ids = {node["id"] for node in nodes if "id" in node}
+    has_cycle = graph_has_cycle(outgoing, node_ids)
+    if has_cycle and any(to_float(edge.get("packetLossPercent"), 0.0) > 5.0 for edge in edges):
+        return "retry_storm"
 
-    if not has_cache:
-        database_ids = [node["id"] for node in nodes_by_type.get("database", [])]
-        for db_id in database_ids:
-            adjacent_compute = set()
-            for source in incoming.get(db_id, []):
-                if node_lookup.get(source, {}).get("type") == "compute":
-                    adjacent_compute.add(source)
-            for target in outgoing.get(db_id, []):
-                if node_lookup.get(target, {}).get("type") == "compute":
-                    adjacent_compute.add(target)
-            if len(adjacent_compute) >= 4:
-                anti_patterns.append("N_PLUS_ONE")
-                break
-
-    return anti_patterns or ["CLEAN"]
-
-
-def assess_pass_fail(graph: Dict) -> Dict:
-    anti_patterns = detect_anti_patterns(graph)
-    effective_count = 0 if anti_patterns == ["CLEAN"] else len(anti_patterns)
-    pass_fail = "PASS" if effective_count == 0 else "FAIL"
-    reliability_score = max(0.0, min(1.0, 1.0 - (0.2 * effective_count)))
-    return {
-        "pass_fail": pass_fail,
-        "reliability_score": reliability_score,
-    }
+    return "stable"
 
 
 def label_graph(graph: Dict) -> Dict:
-    anti_patterns = detect_anti_patterns(graph)
-    assessment = assess_pass_fail(graph)
-    return {
-        "graph_id": graph["graph_id"],
-        "source_repo": graph.get("source_repo", "unknown"),
-        "nodes": graph.get("nodes", []),
-        "edges": graph.get("edges", []),
-        "pass_fail": assessment["pass_fail"],
-        "reliability_score": assessment["reliability_score"],
-        "anti_patterns": anti_patterns,
-        "node_count": len(graph.get("nodes", [])),
-        "edge_count": len(graph.get("edges", [])),
-    }
+    labelled = dict(graph)
+    labelled["label"] = classify_label(graph)
+    return labelled
 
 
-def iter_graphs(path: Path) -> Iterable[Dict]:
+def resolve_graphs_dir() -> Path:
+    graphs_dir = Path(os.getenv("GRAPHS_OUTPUT_DIR", "./data/graphs"))
+    if not graphs_dir.is_absolute():
+        graphs_dir = (ROOT_DIR / graphs_dir).resolve()
+    return graphs_dir
+
+
+def iter_graph_files(path: Path) -> Iterable[Path]:
     if not path.exists():
         return []
-
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            yield json.loads(line)
+    return sorted(graph_file for graph_file in path.glob("*.json") if graph_file.is_file())
 
 
 def main() -> None:
-    LABELLED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    labelled_count = 0
-    with LABELLED_PATH.open("w", encoding="utf-8") as output_handle:
-        for graph in iter_graphs(PARSED_PATH):
-            labelled = label_graph(graph)
-            output_handle.write(json.dumps(labelled, ensure_ascii=True) + "\n")
-            labelled_count += 1
+    graphs_dir = resolve_graphs_dir()
+    os.makedirs(graphs_dir, exist_ok=True)
 
-    print(f"Labelled {labelled_count} graphs -> {LABELLED_PATH}")
+    labelled_count = 0
+    for graph_path in iter_graph_files(graphs_dir):
+        try:
+            graph = json.loads(graph_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        labelled = label_graph(graph)
+        graph_path.write_text(json.dumps(labelled, ensure_ascii=True), encoding="utf-8")
+        labelled_count += 1
+
+    print(f"Labelled {labelled_count} graphs in {graphs_dir}")
 
 
 if __name__ == "__main__":

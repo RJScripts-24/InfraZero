@@ -15,6 +15,21 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+interface EdgeRiskScore {
+  edgeId: string;
+  source: string;
+  target: string;
+  riskScore: number;
+  reasons: string[];
+}
+
+interface NodeRiskScore {
+  nodeId: string;
+  label: string;
+  riskScore: number;
+  reasons: string[];
+}
+
 // ── Handle style: brand blue ──────────────────────────────────────────────
 const handleStyleBase = {
   background: '#3B82F6',
@@ -39,6 +54,9 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
   const metricErrorRate = Number(nodeMetric?.errorRate ?? nodeMetric?.error_rate ?? 0);
   const metricIsOverloaded = Boolean(nodeMetric?.isOverloaded ?? nodeMetric?.is_overloaded);
   const metricQueueDepth = Number(nodeMetric?.queueDepth ?? nodeMetric?.queue_depth ?? 0);
+  const ghostRisk = typeof data.ghostRisk === 'number' ? data.ghostRisk : undefined;
+  const hasSimulationSnapshots = (data.simulationSnapshots?.length ?? 0) > 0;
+  const showGhostRisk = typeof ghostRisk === 'number' && !hasSimulationSnapshots;
 
   const nodeColor = useMemo(() => {
     if (!nodeMetric) return 'rgba(59,130,246,0.15)';
@@ -60,13 +78,20 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
 
   const isSelected = !!data.selected;
 
-  const borderColor = nodeBorderColor;
+  const borderColor = showGhostRisk && ghostRisk > 0.6
+    ? 'rgba(245,158,11,0.8)'
+    : showGhostRisk && ghostRisk > 0.3
+      ? 'rgba(245,158,11,0.55)'
+      : nodeBorderColor;
 
   const shadow = isSelected
     ? '0 0 0 1px rgba(59,130,246,0.3), 0 0 25px rgba(59,130,246,0.2), 0 8px 30px rgba(0,0,0,0.8)'
     : hovered
     ? '0 0 0 1px rgba(59,130,246,0.15), 0 0 15px rgba(59,130,246,0.1), 0 5px 22px rgba(0,0,0,0.7)'
     : '0 4px 15px rgba(0,0,0,0.6)';
+  const combinedShadow = showGhostRisk && ghostRisk > 0.6
+    ? `${shadow}, 0 0 12px rgba(245,158,11,0.6)`
+    : shadow;
 
   const hs = hovered ? handleVisible : handleHidden;
   const nodeClassName = [
@@ -88,13 +113,19 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
         borderStyle: 'solid',
         padding: '16px 20px',
         minWidth: '200px',
-        boxShadow: shadow,
+        boxShadow: combinedShadow,
         borderRadius: '16px',
         transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
+      {showGhostRisk && ghostRisk > 0.3 && (
+        <div className="absolute right-9 top-3 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200">
+          Risk: {Math.round(ghostRisk * 100)}%
+        </div>
+      )}
+
       {metricIsOverloaded && (
         <div className="absolute inset-0 rounded-2xl animate-ping border-2 border-red-500/40 pointer-events-none" />
       )}
@@ -193,6 +224,10 @@ interface FlowCanvasProps {
   }>;
   currentTick?: number;
   isSimulating?: boolean;
+  ghostTraceRisks?: {
+    edgeRisks: EdgeRiskScore[];
+    nodeRisks: NodeRiskScore[];
+  };
 }
 
 export const FlowCanvas = memo(({
@@ -210,6 +245,7 @@ export const FlowCanvas = memo(({
   simulationSnapshots,
   currentTick,
   isSimulating,
+  ghostTraceRisks,
 }: FlowCanvasProps) => {
   const SimPacketDots = ({ edges, isSimulating }: { edges: any[]; isSimulating: boolean }) => {
     const [, setDots] = useState<Array<{ id: string; edgeId: string; progress: number }>>([]);
@@ -237,24 +273,69 @@ export const FlowCanvas = memo(({
     return null;
   };
 
-  const decoratedNodes = nodes.map((node) => ({
+  const nodeRiskById = useMemo(
+    () => new Map((ghostTraceRisks?.nodeRisks || []).map((risk) => [risk.nodeId, risk.riskScore])),
+    [ghostTraceRisks],
+  );
+
+  const edgeRiskById = useMemo(
+    () => new Map((ghostTraceRisks?.edgeRisks || []).map((risk) => [risk.edgeId, risk])),
+    [ghostTraceRisks],
+  );
+
+  const decoratedNodes = useMemo(() => nodes.map((node) => ({
     ...node,
     data: {
       ...(node.data || {}),
+      ghostRisk: (node.data as { ghostRisk?: number } | undefined)?.ghostRisk ?? nodeRiskById.get(node.id),
       isKilled: killedNodes?.has(node.id) ?? false,
       isDegraded: degradedNodes?.has(node.id) ?? false,
       simulationSnapshots,
       currentTick,
       isSimulating,
     },
-  }));
+  })), [nodes, nodeRiskById, killedNodes, degradedNodes, simulationSnapshots, currentTick, isSimulating]);
+
+  const decoratedEdges = useMemo(() => edges.map((edge) => {
+    if ((simulationSnapshots?.length ?? 0) > 0) {
+      return edge;
+    }
+
+    const edgeRisk = edgeRiskById.get(edge.id);
+    if (!edgeRisk) {
+      return edge;
+    }
+
+    const isHighRisk = edgeRisk.riskScore > 0.6;
+    const isMediumRisk = edgeRisk.riskScore > 0.3;
+
+    if (!isHighRisk && !isMediumRisk) {
+      return edge;
+    }
+
+    const stroke = isHighRisk ? 'rgba(245,158,11,0.9)' : 'rgba(245,158,11,0.5)';
+    const strokeWidth = isHighRisk ? 3 : 2;
+
+    return {
+      ...edge,
+      animated: edge.animated || isHighRisk,
+      style: {
+        ...(edge.style || {}),
+        stroke,
+        strokeWidth,
+      },
+      markerEnd: edge.markerEnd && typeof edge.markerEnd === 'object'
+        ? { ...edge.markerEnd, color: stroke }
+        : edge.markerEnd,
+    };
+  }), [edges, edgeRiskById, simulationSnapshots]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <SimPacketDots edges={edges} isSimulating={!!isSimulating} />
       <ReactFlow
         nodes={decoratedNodes}
-        edges={edges}
+        edges={decoratedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}

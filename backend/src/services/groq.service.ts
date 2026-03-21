@@ -15,7 +15,7 @@ const GROQ_MODEL_CANDIDATES = [
   'mixtral-8x7b-32768',
 ].filter((model): model is string => Boolean(model && model.trim()));
 
-const createCompletionWithFallback = async (request: Omit<any, 'model'>): Promise<any> => {
+export const createCompletionWithFallback = async (request: Omit<any, 'model'>): Promise<any> => {
   const tried: string[] = [];
   let lastError: unknown = null;
 

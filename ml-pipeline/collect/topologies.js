@@ -56,13 +56,13 @@ function buildInput(seed, trafficIntensity, nodes, edges, chaosEvents, baselineR
     edges,
     config: {
       seed,
-      totalTicks: DEFAULT_TICKS,
-      trafficPattern: "steady",
-      baselineRps: Number((baselineRps * trafficIntensity).toFixed(2)),
-      peakRpsMultiplier: Number(peakRpsMultiplier.toFixed(2)),
-      chaosEnabled: false,
-      chaosEvents,
-      fullTrace: false
+      total_ticks: DEFAULT_TICKS,
+      traffic_pattern: "steady",
+      baseline_rps: Number((baselineRps * trafficIntensity).toFixed(2)),
+      peak_rps_multiplier: Number(peakRpsMultiplier.toFixed(2)),
+      chaos_enabled: false,
+      chaos_events: chaosEvents,
+      full_trace: false
     }
   };
 }

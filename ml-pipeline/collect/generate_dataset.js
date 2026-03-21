@@ -2,9 +2,47 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { stringify } = require("csv-stringify");
+const { pathToFileURL } = require("url");
 
-const initWasm = require("../../simulation-engine/pkg/simulation_engine.js");
 const { topologyGenerators } = require("./topologies");
+
+const CLI_ARGS = new Set(process.argv.slice(2));
+const QUIET_MODE = CLI_ARGS.has("--quiet") || process.env.DATASET_QUIET === "1";
+
+async function withEngineLogsSuppressed(enabled, fn) {
+  if (!enabled) {
+    return await fn();
+  }
+
+  const original = {
+    log: console.log,
+    info: console.info,
+    warn: console.warn,
+    error: console.error
+  };
+
+  const noop = () => {};
+  console.log = noop;
+  console.info = noop;
+  console.warn = noop;
+  console.error = noop;
+
+  const originalStdoutWrite = process.stdout.write;
+  const originalStderrWrite = process.stderr.write;
+  process.stdout.write = () => true;
+  process.stderr.write = () => true;
+
+  try {
+    return await fn();
+  } finally {
+    console.log = original.log;
+    console.info = original.info;
+    console.warn = original.warn;
+    console.error = original.error;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+  }
+}
 
 // SECTION 1 - WASM INIT
 function hasWasmExports(candidate) {
@@ -16,46 +54,73 @@ function hasWasmExports(candidate) {
 }
 
 async function loadWasm() {
-  if (hasWasmExports(initWasm)) {
-    console.log("WASM loaded");
-    return initWasm;
-  }
+  const { wasmModule, wasmPath } = await loadWasmModule();
 
-  if (initWasm && typeof initWasm.initSync === "function") {
-    const wasmPath = path.resolve(
-      __dirname,
-      "../../simulation-engine/pkg/simulation_engine_bg.wasm"
-    );
+  if (wasmModule && typeof wasmModule.initSync === "function") {
     const wasmBytes = fs.readFileSync(wasmPath);
-    const maybeExports = initWasm.initSync(wasmBytes);
-    const resolved = hasWasmExports(maybeExports) ? maybeExports : initWasm;
-    if (hasWasmExports(resolved)) {
-      console.log("WASM loaded");
-      return resolved;
-    }
+    wasmModule.initSync(wasmBytes);
   }
 
-  if (typeof initWasm === "function") {
-    const maybeExports = await initWasm();
-    const resolved = hasWasmExports(maybeExports) ? maybeExports : initWasm;
-    if (hasWasmExports(resolved)) {
-      console.log("WASM loaded");
-      return resolved;
-    }
+  if (typeof wasmModule === "function") {
+    await wasmModule(pathToFileURL(wasmPath));
   }
 
-  if (initWasm && typeof initWasm.default === "function") {
-    const maybeExports = await initWasm.default();
-    const resolved = hasWasmExports(maybeExports) ? maybeExports : initWasm;
-    if (hasWasmExports(resolved)) {
-      console.log("WASM loaded");
-      return resolved;
-    }
+  if (wasmModule && typeof wasmModule.default === "function") {
+    await wasmModule.default(pathToFileURL(wasmPath));
+  }
+
+  if (hasWasmExports(wasmModule)) {
+    console.log("WASM loaded");
+    return wasmModule;
   }
 
   throw new Error(
     "WASM module did not expose run_simulation/get_telemetry. Rebuild simulation-engine/pkg before collecting data."
   );
+}
+
+async function loadWasmModule() {
+  const moduleCandidates = [
+    {
+      modulePath: path.resolve(__dirname, "../../simulation-engine/pkg/infrazero_simulation_engine.js"),
+      wasmPath: path.resolve(__dirname, "../../simulation-engine/pkg/infrazero_simulation_engine_bg.wasm")
+    },
+    {
+      modulePath: path.resolve(__dirname, "../../simulation-engine/pkg/simulation_engine.js"),
+      wasmPath: path.resolve(__dirname, "../../simulation-engine/pkg/simulation_engine_bg.wasm")
+    }
+  ];
+
+  for (const candidate of moduleCandidates) {
+    if (!fs.existsSync(candidate.modulePath) || !fs.existsSync(candidate.wasmPath)) {
+      continue;
+    }
+
+    try {
+      return {
+        wasmModule: require(candidate.modulePath),
+        wasmPath: candidate.wasmPath
+      };
+    } catch (error) {
+      if (error && error.code !== "ERR_REQUIRE_ESM") {
+        throw error;
+      }
+    }
+
+    const imported = await import(pathToFileURL(candidate.modulePath).href);
+    if (imported && imported.default) {
+      return {
+        wasmModule: imported,
+        wasmPath: candidate.wasmPath
+      };
+    }
+    return {
+      wasmModule: imported,
+      wasmPath: candidate.wasmPath
+    };
+  }
+
+  throw new Error("Could not find simulation-engine/pkg module wrapper.");
 }
 
 // SECTION 2 - PARAMETER SWEEP CONFIG
@@ -116,21 +181,21 @@ function cloneJson(value) {
 }
 
 function applyTrafficPattern(config, trafficPattern, trafficIntensity) {
-  config.config.trafficPattern = ENGINE_TRAFFIC_PATTERN[trafficPattern] || "steady";
+  config.config.traffic_pattern = ENGINE_TRAFFIC_PATTERN[trafficPattern] || "steady";
 
   switch (trafficPattern) {
     case "UNIFORM":
-      config.config.peakRpsMultiplier = 1.1;
+      config.config.peak_rps_multiplier = 1.1;
       break;
     case "BURSTY":
-      config.config.peakRpsMultiplier = Number((2.5 + trafficIntensity).toFixed(2));
+      config.config.peak_rps_multiplier = Number((2.5 + trafficIntensity).toFixed(2));
       break;
     case "THUNDERING_HERD":
-      config.config.peakRpsMultiplier = Number((4.0 + trafficIntensity).toFixed(2));
+      config.config.peak_rps_multiplier = Number((4.0 + trafficIntensity).toFixed(2));
       break;
     case "RAMP":
-      config.config.baselineRps = Number((config.config.baselineRps * 0.8).toFixed(2));
-      config.config.peakRpsMultiplier = Number((2.0 + trafficIntensity * 1.2).toFixed(2));
+      config.config.baseline_rps = Number((config.config.baseline_rps * 0.8).toFixed(2));
+      config.config.peak_rps_multiplier = Number((2.0 + trafficIntensity * 1.2).toFixed(2));
       break;
     default:
       break;
@@ -148,10 +213,10 @@ function prepareRunConfig(combo, universeSeed) {
   );
 
   config.config.seed = universeSeed;
-  config.config.totalTicks = config.config.totalTicks || 240;
-  config.config.chaosEnabled = combo.chaosEnabled;
+  config.config.total_ticks = config.config.total_ticks || 240;
+  config.config.chaos_enabled = combo.chaosEnabled;
   if (!combo.chaosEnabled) {
-    config.config.chaosEvents = [];
+    config.config.chaos_events = [];
   }
 
   applyTrafficPattern(config, combo.trafficPattern, combo.trafficIntensity);
@@ -272,6 +337,10 @@ async function main() {
   const wasm = await loadWasm();
   const combinations = buildCombinations(sweep);
 
+  if (QUIET_MODE) {
+    console.log("Quiet mode enabled: suppressing per-tick engine logs.");
+  }
+
   const dataDir = path.resolve(__dirname, "../data");
   fs.mkdirSync(dataDir, { recursive: true });
 
@@ -298,18 +367,24 @@ async function main() {
         const config = prepareRunConfig(combo, universeSeed);
         const configJson = JSON.stringify(config);
 
-        const telemetryRows = parseEngineJson(
-          wasm.get_telemetry(configJson),
-          "get_telemetry"
-        );
-        if (!Array.isArray(telemetryRows)) {
-          throw new Error("get_telemetry did not return a JSON array.");
-        }
-
         const simulationOutput = parseEngineJson(
-          wasm.run_simulation(configJson),
+          await withEngineLogsSuppressed(QUIET_MODE, () => wasm.run_simulation(configJson)),
           "run_simulation"
         );
+
+        let telemetryRows = Array.isArray(simulationOutput.telemetry)
+          ? simulationOutput.telemetry
+          : null;
+
+        if (!telemetryRows) {
+          telemetryRows = parseEngineJson(
+            await withEngineLogsSuppressed(QUIET_MODE, () => wasm.get_telemetry(configJson)),
+            "get_telemetry"
+          );
+        }
+        if (!Array.isArray(telemetryRows)) {
+          throw new Error("Telemetry payload did not return a JSON array.");
+        }
 
         const runId =
           telemetryRows[0]?.run_id ||
@@ -326,7 +401,7 @@ async function main() {
             )
         );
         const totalTicks = Number(
-          simulationOutput.ticksRun ?? config.config.totalTicks
+          simulationOutput.ticksRun ?? config.config.total_ticks
         );
 
         for (const row of telemetryRows) {

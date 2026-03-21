@@ -15,6 +15,7 @@ import webhookRoutes from './routes/webhooks.routes';
 import authRoutes from './routes/auth.routes';
 import projectsRoutes from './routes/projects.routes';
 import simulationsRoutes from './routes/simulations.routes';
+import ghosttraceRoutes from './routes/ghosttrace.routes';
 
 // Middlewares & Sockets
 import { errorHandler } from './middlewares/errorHandler';
@@ -57,6 +58,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/simulations', simulationsRoutes);
+app.use('/api/ghosttrace', ghosttraceRoutes);
 
 // Contract-first v1 routes (preferred by frontend API contract)
 app.use('/v1/health', healthRoutes);
@@ -64,6 +66,7 @@ app.use('/v1/auth', authRoutes);
 app.use('/v1/projects', projectsRoutes);
 app.use('/v1/ai', aiRoutes);
 app.use('/v1/simulations', simulationsRoutes);
+app.use('/v1/ghosttrace', ghosttraceRoutes);
 
 /**
  * 5. Global Error Handling

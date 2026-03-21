@@ -1,28 +1,36 @@
 import copy
 import json
+import os
 import random
 import uuid
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List
 
-from label_graphs import label_graph
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT_DIR / "data"
-LABELLED_PATH = DATA_DIR / "labelled_graphs.jsonl"
-AUGMENTED_PATH = DATA_DIR / "augmented_graphs.jsonl"
+
+
+def resolve_graphs_dir() -> Path:
+    graphs_dir = Path(os.getenv("GRAPHS_OUTPUT_DIR", "./data/graphs"))
+    if not graphs_dir.is_absolute():
+        graphs_dir = (ROOT_DIR / graphs_dir).resolve()
+    return graphs_dir
 
 
 def iter_graphs(path: Path) -> Iterable[Dict]:
     if not path.exists():
         return []
 
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if not line:
-                continue
-            yield json.loads(line)
+    for file_path in sorted(path.glob("*.json")):
+        if not file_path.is_file():
+            continue
+        try:
+            yield json.loads(file_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
 
 
 def make_rng(graph: Dict, salt: str) -> random.Random:
@@ -36,13 +44,15 @@ def rehydrate_graph(labelled_graph: Dict) -> Dict:
         "source_repo": labelled_graph.get("source_repo", "unknown"),
         "nodes": copy.deepcopy(labelled_graph.get("nodes", [])),
         "edges": copy.deepcopy(labelled_graph.get("edges", [])),
+        "label": labelled_graph.get("label", "stable"),
     }
 
 
 def relabel_mutation(graph: Dict, suffix: str) -> Dict:
     mutated = copy.deepcopy(graph)
     mutated["graph_id"] = f"{graph['graph_id']}__{suffix}__{uuid.uuid4().hex[:8]}"
-    return label_graph(mutated)
+    mutated["label"] = graph.get("label", "stable")
+    return mutated
 
 
 def mutate_remove_random_node(graph: Dict) -> Dict:
@@ -163,26 +173,28 @@ def mutate_remove_lb(graph: Dict) -> Dict:
 
 
 def main() -> None:
-    original_graphs = list(iter_graphs(LABELLED_PATH))
+    graphs_dir = resolve_graphs_dir()
+    os.makedirs(graphs_dir, exist_ok=True)
+    original_graphs = list(iter_graphs(graphs_dir))
     augmented_graphs: List[Dict] = []
 
     for graph in original_graphs:
         base_graph = rehydrate_graph(graph)
-        augmented_graphs.append(label_graph(base_graph))
+        augmented_graphs.append(base_graph)
         augmented_graphs.append(mutate_remove_random_node(graph))
         augmented_graphs.append(mutate_add_cache(graph))
         augmented_graphs.append(mutate_add_replica(graph))
         augmented_graphs.append(mutate_remove_lb(graph))
 
-    AUGMENTED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with AUGMENTED_PATH.open("w", encoding="utf-8") as handle:
+    augmented_dir = graphs_dir / "augmented"
+    os.makedirs(augmented_dir, exist_ok=True)
+    augmented_path = augmented_dir / "augmented_graphs.jsonl"
+    with augmented_path.open("w", encoding="utf-8") as handle:
         for graph in augmented_graphs:
             handle.write(json.dumps(graph, ensure_ascii=True) + "\n")
 
-    pass_count = sum(1 for graph in augmented_graphs if graph.get("pass_fail") == "PASS")
-    fail_count = sum(1 for graph in augmented_graphs if graph.get("pass_fail") == "FAIL")
     print(
-        f"Original: {len(original_graphs)} | After augmentation: {len(augmented_graphs)} | PASS: {pass_count} | FAIL: {fail_count}"
+        f"Original: {len(original_graphs)} | After augmentation: {len(augmented_graphs)} | Output: {augmented_path}"
     )
 
 

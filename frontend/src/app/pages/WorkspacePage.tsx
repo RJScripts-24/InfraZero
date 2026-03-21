@@ -12,6 +12,7 @@ import {
   PanelLeftOpen,
   Terminal,
   Zap,
+  Ghost,
 } from 'lucide-react';
 import {
   addEdge,
@@ -24,6 +25,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { FlowCanvas } from '../components/FlowCanvas';
+import { GhostTracePanel } from '../components/GhostTracePanel';
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
 import { ReportView } from '../components/ReportView';
 import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
@@ -153,6 +155,44 @@ const extractGraphPayload = (payload: any): { nodes: Node[]; edges: Edge[] } => 
   return sanitizeGraph(candidate?.nodes, candidate?.edges);
 };
 
+interface EdgeRiskScore {
+  edgeId: string;
+  source: string;
+  target: string;
+  riskScore: number;
+  reasons: string[];
+}
+
+interface NodeRiskScore {
+  nodeId: string;
+  label: string;
+  riskScore: number;
+  reasons: string[];
+}
+
+interface SyntheticSpan {
+  spanId: string;
+  traceId: string;
+  parentSpanId: string | null;
+  serviceName: string;
+  operationName: string;
+  startTimeMs: number;
+  durationMs: number;
+  status: 'ok' | 'error' | 'timeout';
+  tags: Record<string, string>;
+}
+
+interface GhostTraceResult {
+  graphHash: string;
+  topologyEmbedding: number[];
+  edgeRisks: EdgeRiskScore[];
+  nodeRisks: NodeRiskScore[];
+  overallRisk: number;
+  predictedAnomalyClass: string;
+  syntheticSpans: SyntheticSpan[];
+  analysisNarrative: string;
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
@@ -177,6 +217,13 @@ export default function WorkspacePage() {
   const [simulationMode, setSimulationMode] = useState<'deterministic' | 'randomized'>('deterministic');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [simulationResult, setSimulationResult] = useState<any>(null);
+  const [ghostTraceResult, setGhostTraceResult] = useState<GhostTraceResult | null>(null);
+  const [ghostTraceLoading, setGhostTraceLoading] = useState(false);
+  const [ghostPanelOpen, setGhostPanelOpen] = useState(false);
+  const [ghostTraceRisks, setGhostTraceRisks] = useState<{ edgeRisks: EdgeRiskScore[]; nodeRisks: NodeRiskScore[] }>({
+    edgeRisks: [],
+    nodeRisks: [],
+  });
   const [currentTick, setCurrentTick] = useState(0);
   const [isSimulating, setIsSimulating] = useState(false);
   const [snapshots, setSnapshots] = useState<any[]>([]);
@@ -662,6 +709,55 @@ export default function WorkspacePage() {
     setLogs(importLogs);
   };
 
+  const runGhostTrace = async () => {
+    if (isTemporaryGuest()) {
+      setLogs(prev => [...prev, '[GHOSTTRACE] GhostTrace analysis requires authenticated account.']);
+      setTerminalExpanded(true);
+      return;
+    }
+
+    setGhostTraceLoading(true);
+    try {
+      const cleanGraph = sanitizeGraph(nodes, edges);
+      const response = await authFetch('/api/ghosttrace/analyze', {
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+          nodes: cleanGraph.nodes,
+          edges: cleanGraph.edges,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`GhostTrace failed: ${response.statusText}`);
+      }
+
+      const data = await response.json() as GhostTraceResult;
+      setGhostTraceResult(data);
+      setGhostTraceRisks({
+        edgeRisks: data.edgeRisks || [],
+        nodeRisks: data.nodeRisks || [],
+      });
+      setNodes(nds => nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          ghostRisk: data.nodeRisks.find((risk) => risk.nodeId === node.id)?.riskScore,
+        },
+      })));
+      setLogs(prev => [
+        ...prev,
+        `[GHOSTTRACE] ${data.predictedAnomalyClass} detected.`,
+        `[GHOSTTRACE] Overall risk ${(data.overallRisk * 100).toFixed(0)}% across ${data.edgeRisks.length} edges and ${data.nodeRisks.length} nodes.`,
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown GhostTrace error';
+      setLogs(prev => [...prev, `[GHOSTTRACE ERROR] ${message}`]);
+    } finally {
+      setGhostTraceLoading(false);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col relative overflow-hidden" style={{ backgroundColor: '#000000', fontFamily: 'Inter, sans-serif' }}>
       
@@ -770,6 +866,19 @@ export default function WorkspacePage() {
               <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
               <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
               DEPLOY & TEST
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => {
+                setGhostPanelOpen(true);
+                void runGhostTrace();
+              }}
+              className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-amber-100 shadow-xl transition-all hover:bg-amber-500/15"
+            >
+              <Ghost size={14} />
+              GhostTrace
             </motion.button>
 
             <button
@@ -920,7 +1029,25 @@ export default function WorkspacePage() {
             simulationSnapshots={snapshots}
             currentTick={currentTick}
             isSimulating={isSimulating}
+            ghostTraceRisks={ghostTraceRisks}
           />
+
+          <AnimatePresence>
+            {ghostPanelOpen && (
+              <GhostTracePanel
+                isOpen={ghostPanelOpen}
+                onClose={() => setGhostPanelOpen(false)}
+                result={ghostTraceResult}
+                isLoading={ghostTraceLoading}
+                nodes={nodes.map((node) => ({
+                  id: String(node.id),
+                  data: {
+                    label: (node.data as { label?: string } | undefined)?.label,
+                  },
+                }))}
+              />
+            )}
+          </AnimatePresence>
 
           {/* Canvas Labels / Overlays */}
           <div className="absolute bottom-8 left-8 z-30 pointer-events-none opacity-40 select-none">

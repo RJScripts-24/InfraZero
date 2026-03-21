@@ -1,3 +1,4 @@
+import argparse
 import csv
 import os
 import sys
@@ -7,20 +8,25 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Set, Tuple
 from urllib.parse import quote
 
+from dotenv import load_dotenv
 import requests
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 GITHUB_API_BASE = "https://api.github.com"
 SEARCH_ENDPOINT = f"{GITHUB_API_BASE}/search/code"
 TARGET_DOWNLOADS = 500
 REQUEST_DELAY_SECONDS = 2.0
 MIN_FILE_BYTES = 200
-KEYWORDS = [
-    "load balancer",
-    "microservice",
-    "database",
-    "cache",
-    "system design",
-    "architecture",
+SEARCH_QUERIES = [
+    "microservices architecture extension:excalidraw",
+    "distributed system extension:excalidraw",
+    "system design filename:.excalidraw",
+    "cloud architecture extension:excalidraw",
+    "microservices diagram extension:excalidraw",
+    "kubernetes architecture extension:excalidraw",
+    "api gateway service mesh extension:excalidraw",
+    "event driven architecture extension:excalidraw",
 ]
 PRIORITY_REPOS = [
     "karanpratapsingh/system-design",
@@ -30,9 +36,22 @@ PRIORITY_REPOS = [
 ]
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT_DIR / "data"
-RAW_DIR = DATA_DIR / "raw_excalidraw"
-MANIFEST_PATH = DATA_DIR / "manifest.csv"
+
+
+def resolve_output_paths() -> Tuple[Path, Path, Path]:
+    output_dir = os.getenv("SCRAPER_OUTPUT_DIR", "./data/raw")
+    os.makedirs(output_dir, exist_ok=True)
+
+    raw_dir = Path(output_dir)
+    if not raw_dir.is_absolute():
+        raw_dir = (ROOT_DIR / raw_dir).resolve()
+
+    data_dir = raw_dir.parent
+    manifest_path = data_dir / "manifest.csv"
+    return raw_dir, data_dir, manifest_path
+
+
+RAW_DIR, DATA_DIR, MANIFEST_PATH = resolve_output_paths()
 
 
 def sanitize_filename(value: str) -> str:
@@ -150,20 +169,21 @@ def iter_priority_repo_files(client: GitHubClient) -> Iterator[Dict[str, str]]:
             }
 
 
-def iter_search_results(client: GitHubClient) -> Iterator[Dict[str, str]]:
+def iter_search_results(client: GitHubClient, max_repos: int) -> Iterator[Dict[str, str]]:
     seen_search_keys: Set[Tuple[str, str]] = set()
 
-    for keyword in KEYWORDS:
+    for search_query in SEARCH_QUERIES:
+        seen_repos_for_query: Set[str] = set()
         for page in range(1, 6):
             params = {
-                "q": f'extension:excalidraw "{keyword}"',
+                "q": search_query,
                 "per_page": 100,
                 "page": page,
             }
             try:
                 payload = client.get_json(SEARCH_ENDPOINT, params=params)
             except requests.HTTPError as exc:
-                print(f"Search failed for keyword '{keyword}' page {page}: {exc}", file=sys.stderr)
+                print(f"Search failed for query '{search_query}' page {page}: {exc}", file=sys.stderr)
                 break
 
             items = payload.get("items", [])
@@ -175,6 +195,10 @@ def iter_search_results(client: GitHubClient) -> Iterator[Dict[str, str]]:
                 path_name = item.get("path")
                 if not repo or not path_name:
                     continue
+
+                if repo not in seen_repos_for_query and len(seen_repos_for_query) >= max_repos:
+                    continue
+                seen_repos_for_query.add(repo)
 
                 key = (repo, path_name)
                 if key in seen_search_keys:
@@ -199,11 +223,12 @@ def iter_search_results(client: GitHubClient) -> Iterator[Dict[str, str]]:
                 }
 
 
-def download_candidate_files(client: GitHubClient) -> None:
+def download_candidate_files(client: GitHubClient, max_repos: int) -> None:
     ensure_directories()
     downloaded = 0
     skipped_small = 0
     skipped_duplicate = 0
+    total_candidates_seen = 0
     saved_names: Set[str] = set()
     seen_repo_paths: Set[Tuple[str, str]] = set()
 
@@ -213,7 +238,8 @@ def download_candidate_files(client: GitHubClient) -> None:
         )
         writer.writeheader()
 
-        for candidate in chain(iter_priority_repo_files(client), iter_search_results(client)):
+        for candidate in chain(iter_priority_repo_files(client), iter_search_results(client, max_repos)):
+            total_candidates_seen += 1
             if downloaded >= TARGET_DOWNLOADS:
                 break
 
@@ -255,11 +281,36 @@ def download_candidate_files(client: GitHubClient) -> None:
     if skipped_duplicate:
         print(f"Duplicate matches skipped: {skipped_duplicate}")
 
+    if downloaded >= TARGET_DOWNLOADS:
+        stop_reason = "target reached"
+    else:
+        stop_reason = "no more candidates from current search scope"
+
+    print("Scrape summary:")
+    print(f"  Downloaded: {downloaded}/{TARGET_DOWNLOADS}")
+    print(f"  Candidates seen: {total_candidates_seen}")
+    print(f"  Skipped (too small): {skipped_small}")
+    print(f"  Skipped (duplicates): {skipped_duplicate}")
+    print(f"  Stop reason: {stop_reason}")
+
 
 def main() -> None:
-    token = os.getenv("GITHUB_TOKEN")
+    parser = argparse.ArgumentParser(description="Scrape Excalidraw architecture files from GitHub")
+    parser.add_argument("--token", help="GitHub personal access token")
+    args = parser.parse_args()
+
+    token = args.token or os.getenv("GITHUB_TOKEN")
+    if not token:
+        print("ERROR: GitHub token not found.")
+        print("Either pass --token YOUR_TOKEN or create ml-pipeline/.env with GITHUB_TOKEN=...")
+        sys.exit(1)
+
+    max_repos = int(os.getenv("SCRAPER_MAX_REPOS", "10"))
+    global RAW_DIR, DATA_DIR, MANIFEST_PATH
+    RAW_DIR, DATA_DIR, MANIFEST_PATH = resolve_output_paths()
+
     client = GitHubClient(token)
-    download_candidate_files(client)
+    download_candidate_files(client, max_repos)
 
 
 if __name__ == "__main__":

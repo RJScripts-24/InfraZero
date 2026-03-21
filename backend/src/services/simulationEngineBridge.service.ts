@@ -2,7 +2,11 @@ import path from 'path';
 import fs from 'fs';
 import { DEFAULT_EDGE_CONFIG, DEFAULT_NODE_CONFIG } from '../config/constants';
 import { CustomEdge, CustomNode } from '../types/graph';
-import { generateStableHash } from '../utils/stableHash';
+import {
+  buildDeterministicTopologyHash,
+  orderEdgesDeterministically,
+  orderNodesDeterministically,
+} from '../utils/deterministicTopology';
 import { logger } from '../utils/logger';
 
 interface EngineModule {
@@ -178,7 +182,7 @@ const nodeTypeToEngineType = (node: CustomNode): string => {
 };
 
 const normalizeNodes = (nodes: CustomNode[]): Array<Record<string, unknown>> => {
-  return nodes.map((node) => ({
+  return orderNodesDeterministically(nodes).map((node) => ({
     id: node.id,
     label: node.data?.label || `node-${node.id}`,
     nodeType: nodeTypeToEngineType(node),
@@ -300,11 +304,13 @@ export const runSimulationWithEngine = (
     throw new Error('Simulation engine module is unavailable.');
   }
 
+  const orderedNodes = orderNodesDeterministically(nodes);
+  const orderedEdges = orderEdgesDeterministically(orderedNodes, edges);
   const normalizedChaosEvents = normalizeChaosEvents(options?.chaosEvents);
 
   const normalizedInput = {
-    nodes: normalizeNodes(nodes),
-    edges: normalizeEdges(edges),
+    nodes: normalizeNodes(orderedNodes),
+    edges: normalizeEdges(orderedEdges),
     config: {
       seed,
       total_ticks: 1000,
@@ -370,5 +376,5 @@ export const runSimulationWithEngine = (
 };
 
 export const buildDeterministicSeed = (projectId: string, nodes: CustomNode[], edges: CustomEdge[]): number => {
-  return parseInt(generateStableHash({ projectId, nodes, edges }).slice(0, 8), 16);
+  return parseInt(buildDeterministicTopologyHash(projectId, nodes, edges).slice(0, 8), 16);
 };
