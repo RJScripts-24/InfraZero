@@ -13,7 +13,7 @@ load_dotenv("../.env")
 import sys
 
 sys.path.append(os.path.dirname(__file__))
-from graph_encoder import GhostTraceGNN, GraphDataset
+from graph_encoder import GhostTraceGNN, GraphDataset, graph_to_data, NUM_NODE_FEATURES
 
 
 class NodeData(BaseModel):
@@ -53,7 +53,7 @@ class InferenceResponse(BaseModel):
 
 app = FastAPI(title="GhostTrace Inference Server")
 
-CLASSES = ["cascading_failure", "thundering_herd", "retry_storm", "stable"]
+CLASSES = ["stable", "unstable"]
 
 # Load model once at startup
 model = None
@@ -75,7 +75,12 @@ async def load_model() -> None:
 
     encoder = GhostTraceGNN()
     head = torch.nn.Sequential(
+        torch.nn.Linear(128, 64),
+        torch.nn.BatchNorm1d(64),
+        torch.nn.ELU(),
+        torch.nn.Dropout(p=0.3),
         torch.nn.Linear(64, 32),
+        torch.nn.BatchNorm1d(32),
         torch.nn.ELU(),
         torch.nn.Dropout(p=0.2),
         torch.nn.Linear(32, len(CLASSES)),
@@ -112,7 +117,7 @@ async def load_model() -> None:
     print(f"[GhostTrace] Model loaded from {chosen_path}")
 
     # Sanity check: run inference on a known thundering_herd topology
-    # and verify it predicts thundering_herd with >80% confidence
+    # and verify it predicts unstable with >80% confidence
     test_request = InferenceRequest(
         nodes=[
             Node(id="1", data=NodeData(label="API Gateway", type="Gateway", processingPowerMs=100, failureRatePercent=5, coldStartLatencyMs=0)),
@@ -137,110 +142,51 @@ async def load_model() -> None:
         probs = torch.softmax(logits / 1.5, dim=1)
         pred = probs.argmax(dim=1).item()
         conf = probs[0][pred].item()
-    CLASSES_LOCAL = ['cascading_failure', 'thundering_herd', 'retry_storm', 'stable']
+    CLASSES_LOCAL = ['stable', 'unstable']
     print(f"[GhostTrace] Sanity check: {CLASSES_LOCAL[pred]} ({conf*100:.1f}% confidence)")
-    if CLASSES_LOCAL[pred] != 'thundering_herd' or conf < 0.80:
-        print("[GhostTrace] WARNING: Sanity check FAILED - feature mismatch may still exist")
-        print(f"[GhostTrace] Expected thundering_herd >80%, got {CLASSES_LOCAL[pred]} {conf*100:.1f}%")
+    if CLASSES_LOCAL[pred] != 'unstable' or conf < 0.80:
+        print('[GhostTrace] WARNING: Sanity check FAILED')
+        print(f"[GhostTrace] Expected unstable >80%, got {CLASSES_LOCAL[pred]} {conf*100:.1f}%")
     else:
-        print("[GhostTrace] Sanity check PASSED - features aligned correctly")
+        print('[GhostTrace] Sanity check PASSED')
 
 
 def request_to_pyg(request: InferenceRequest):
-    from torch_geometric.data import Data
+    """Convert inference request to PyG Data using graph_encoder.graph_to_data for consistency."""
+    from torch_geometric.data import Data as PyGData
 
-    nodes = request.nodes
-    edges = request.edges
+    # Convert pydantic models to the dict format expected by graph_to_data
+    graph_dict = {
+        "nodes": [
+            {
+                "id": n.id,
+                "data": {
+                    "label": n.data.label,
+                    "type": n.data.type,
+                    "processingPowerMs": n.data.processingPowerMs,
+                    "failureRatePercent": n.data.failureRatePercent,
+                    "coldStartLatencyMs": n.data.coldStartLatencyMs,
+                },
+            }
+            for n in request.nodes
+        ],
+        "edges": [
+            {
+                "id": e.id,
+                "source": e.source,
+                "target": e.target,
+                "latencyMs": e.latencyMs,
+                "packetLossPercent": e.packetLossPercent,
+                "bandwidthLimitMbps": e.bandwidthLimitMbps,
+            }
+            for e in request.edges
+        ],
+        "label": "stable",  # placeholder, not used for inference
+    }
 
-    node_id_to_idx = {n.id: i for i, n in enumerate(nodes)}
-
-    # Build degree maps exactly matching build_degree_maps() in graph_encoder.py
-    in_degree = {n.id: 0 for n in nodes}
-    out_degree = {n.id: 0 for n in nodes}
-
-    valid_edges = []
-    for e in edges:
-        src = e.source
-        tgt = e.target
-        if src in node_id_to_idx and tgt in node_id_to_idx:
-            out_degree[src] += 1
-            in_degree[tgt] += 1
-            valid_edges.append(e)
-
-    x = []
-    for n in nodes:
-        incoming = in_degree[n.id]
-        outgoing = out_degree[n.id]
-        fan_out = outgoing
-
-        # EXACT match to graph_encoder.py is_spof logic:
-        # is_spof marks leaf nodes (nodes that receive exactly one
-        # connection and have no outgoing edges — dead ends)
-        is_spof = 1.0 if incoming == 1 and outgoing == 0 else 0.0
-
-        # EXACT match to graph_encoder.py default values:
-        # processingPowerMs default = 100.0
-        # coldStartLatencyMs default = 0.0  (NOT 200 — this was the bug)
-        # failureRatePercent default = 0.0
-        processing = (n.data.processingPowerMs if n.data.processingPowerMs is not None else 100.0) / 1000.0
-        cold_start = (n.data.coldStartLatencyMs if n.data.coldStartLatencyMs is not None else 0.0) / 1000.0
-        failure_rate = (n.data.failureRatePercent if n.data.failureRatePercent is not None else 0.0) / 100.0
-
-        # Node type encoding - exactly mirrors encode_node_type()
-        # and NODE_TYPE_TO_ID from graph_encoder.py
-        # Infrastructure, Edge Network, Background Job all -> 0
-        # DO NOT map them to 6, 7, or any other value
-        raw_type = (n.data.type or '').lower().strip()
-
-        if raw_type in ('gateway',):
-            type_id = 1
-        elif raw_type in ('postgresql',):
-            type_id = 2
-        elif raw_type in ('cache',):
-            type_id = 3
-        elif raw_type in ('rabbitmq',):
-            type_id = 4
-        elif raw_type in ('service',):
-            type_id = 5
-        elif 'gateway' in raw_type:
-            type_id = 1
-        elif 'postgres' in raw_type:
-            type_id = 2
-        elif 'cache' in raw_type:
-            type_id = 3
-        elif 'rabbit' in raw_type or 'queue' in raw_type:
-            type_id = 4
-        elif 'service' in raw_type:
-            type_id = 5
-        else:
-            type_id = 0  # Infrastructure, Edge Network, Background Job, unknown
-
-        features = [
-            min(processing, 1.0),
-            min(cold_start, 1.0),
-            min(failure_rate, 1.0),
-            incoming / 10.0,
-            outgoing / 10.0,
-            fan_out / 8.0,
-            is_spof,
-            type_id / 10.0,
-        ]
-        x.append(features)
-
-    # Build edge index from valid edges only
-    edge_index = []
-    for e in valid_edges:
-        edge_index.append([node_id_to_idx[e.source], node_id_to_idx[e.target]])
-
-    # Handle graphs with no valid edges
-    if not edge_index:
-        edge_index = [[0, 0]]
-
-    x_tensor = torch.tensor(x, dtype=torch.float32)
-    edge_tensor = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-    batch = torch.zeros(len(nodes), dtype=torch.long)
-
-    return Data(x=x_tensor, edge_index=edge_tensor, batch=batch)
+    data = graph_to_data(graph_dict)
+    data.batch = torch.zeros(data.x.size(0), dtype=torch.long)
+    return data
 
 
 @app.post("/predict", response_model=InferenceResponse)
@@ -269,23 +215,11 @@ async def predict(request: InferenceRequest):
 
     inference_time = (time.time() - start) * 1000
 
-    class_probs = {CLASSES[i]: round(probs[0][i].item(), 4) for i in range(4)}
+    class_probs = {CLASSES[i]: round(probs[0][i].item(), 4) for i in range(2)}
 
-    # Get 64-dim topology embedding from pooled encoder output.
+    # Get 128-dim topology embedding from pooled encoder output.
     with torch.no_grad():
-        from torch_geometric.nn import global_mean_pool, global_max_pool
-
-        x = data.x
-        # Forward through GATv2 layers only (not classifier)
-        x1 = model.conv1(x, data.edge_index)
-        x1 = torch.nn.functional.elu(x1)
-        x1 = torch.nn.functional.dropout(x1, p=0.5, training=False)
-        x2 = model.conv2(x1, data.edge_index)
-        x2 = torch.nn.functional.elu(x2)
-        x2 = torch.nn.functional.dropout(x2, p=0.5, training=False)
-        x3 = model.conv3(x2, data.edge_index)
-        graph_emb = torch.cat([global_mean_pool(x3, data.batch), global_max_pool(x3, data.batch)], dim=1)
-        topology_embedding = graph_emb[0].tolist()
+        topology_embedding = graph_embedding[0].tolist()
 
     return InferenceResponse(
         predictedClass=CLASSES[pred_idx],

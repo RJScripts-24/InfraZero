@@ -1,370 +1,477 @@
-import json
 import os
-from collections import Counter
+import sys
+import json
+import hashlib
+import random
+import yaml as pyyaml
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from collections import defaultdict
+from dotenv import load_dotenv
+from tqdm import tqdm
 
-import requests
-import yaml
+load_dotenv('../.env')
 
-from label_graphs import label_graph
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-ADDITIONAL_QUERIES = [
-    "topic:microservices topic:architecture",
-    "topic:distributed-systems stars:>50",
-    "topic:system-design stars:>100",
-    "docker-compose microservices filename:docker-compose.yml stars:>30",
-]
+sys.path.append(os.path.dirname(__file__))
+from label_graphs import classify_graph
 
 
-def resolve_dir(path_value: str) -> Path:
-    path = Path(path_value)
-    if not path.is_absolute():
-        path = (ROOT_DIR / path).resolve()
-    return path
+COMPOSE_FILENAMES = {
+    'docker-compose.yml',
+    'docker-compose.yaml',
+    'docker-compose.prod.yml',
+    'docker-compose.prod.yaml',
+    'docker-compose.dev.yml',
+    'docker-compose.dev.yaml',
+    'docker-compose.override.yml',
+    'docker-compose.override.yaml',
+    'docker-compose.test.yml',
+    'docker-compose.test.yaml',
+    'compose.yml',
+    'compose.yaml',
+}
+
+SKIP_DIRS = {'.git', 'node_modules', 'vendor', '__pycache__',
+             '.idea', '.vscode', 'dist', 'build', 'target'}
 
 
-def infer_source(path_value: str) -> str:
-    lowered = path_value.lower()
-    if "trainticket" in lowered or "train-ticket" in lowered or "train_ticket" in lowered:
-        return "trainticket"
-    if "deathstar" in lowered or "death-star" in lowered or "death_star" in lowered:
-        return "deathstar"
-    if "online-boutique" in lowered or "online_boutique" in lowered or "boutique" in lowered:
-        return "online-boutique"
-    return "trainticket"
+def infer_node_type(name: str, image: str) -> tuple[str, int, int]:
+    combined = (name + ' ' + image).lower()
+
+    if any(x in combined for x in ['postgres', 'mysql', 'mongo',
+           'mariadb', 'cockroach', 'cassandra', 'oracle',
+           'mssql', 'sqlite', 'database', '-db', '_db', 'db-']):
+        return 'PostgreSQL', 80, 3
+
+    if any(x in combined for x in ['redis', 'memcach', 'hazelcast',
+           'varnish', 'cache', 'ehcache']):
+        return 'Cache', 10, 2
+
+    if any(x in combined for x in ['rabbit', 'kafka', 'zookeeper',
+           'nats', 'pulsar', 'activemq', 'sqs', 'queue',
+           'broker', 'topic', 'amqp']):
+        return 'RabbitMQ', 30, 3
+
+    if any(x in combined for x in ['nginx', 'gateway', 'proxy',
+           'ingress', 'traefik', 'haproxy', 'envoy', 'istio',
+           'kong', 'ambassador', 'apigee', 'api-gw']):
+        return 'Gateway', 20, 2
+
+    if any(x in combined for x in ['frontend', 'ui', 'web',
+           'client', 'react', 'angular', 'vue', 'next',
+           'nuxt', 'svelte', 'static']):
+        return 'Service', 50, 5
+
+    if any(x in combined for x in ['load', 'balancer', 'lb',
+           'infrastructure', 'edge', 'cdn', 'cloudfront']):
+        return 'Infrastructure', 15, 2
+
+    return 'Service', random.randint(50, 300), random.randint(3, 12)
 
 
-def infer_type(service_name: str) -> str:
-    lowered = service_name.lower()
-    if any(token in lowered for token in ["db", "mongo", "mysql", "postgres"]):
-        return "PostgreSQL"
-    if any(token in lowered for token in ["redis", "cache"]):
-        return "Cache"
-    if any(token in lowered for token in ["rabbit", "kafka", "queue"]):
-        return "RabbitMQ"
-    if any(token in lowered for token in ["gateway", "proxy", "nginx"]):
-        return "Gateway"
-    if any(token in lowered for token in ["frontend", "ui"]):
-        return "Service"
-    return "Service"
-
-
-def make_node(node_id: str) -> Dict:
-    return {
-        "id": node_id,
-        "data": {
-            "label": node_id.replace("-", " ").title(),
-            "type": infer_type(node_id),
-            "processingPowerMs": 100,
-            "failureRatePercent": 5,
-            "coldStartLatencyMs": 200,
-        },
-    }
-
-
-def make_edge(source: str, target: str) -> Dict:
-    return {
-        "id": f"e-{source}-{target}",
-        "source": source,
-        "target": target,
-        "latencyMs": 50,
-        "packetLossPercent": 1,
-    }
-
-
-def parse_docker_compose(filepath: str) -> Optional[Dict]:
-    path = Path(filepath)
-    try:
-        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+def parse_compose_data(compose: dict, repo_name: str) -> dict | None:
+    services = compose.get('services', {})
+    if not services or not isinstance(services, dict):
+        return None
+    if len(services) < 2:
         return None
 
-    services = payload.get("services", {}) if isinstance(payload, dict) else {}
-    if not isinstance(services, dict) or not services:
-        return None
-
-    nodes = [make_node(service_name) for service_name in sorted(services.keys())]
-    edges: List[Dict] = []
-    seen_edges: Set[Tuple[str, str]] = set()
-
-    for target, config in services.items():
-        if not isinstance(config, dict):
-            continue
-
-        depends_on = config.get("depends_on", [])
-        dependencies: List[str] = []
-        if isinstance(depends_on, list):
-            dependencies = [dep for dep in depends_on if isinstance(dep, str)]
-        elif isinstance(depends_on, dict):
-            dependencies = [dep for dep in depends_on.keys() if isinstance(dep, str)]
-
-        for source in dependencies:
-            edge_key = (source, target)
-            if edge_key in seen_edges:
-                continue
-            seen_edges.add(edge_key)
-            edges.append(make_edge(source, target))
-
-    return {
-        "nodes": nodes,
-        "edges": edges,
-        "label": "stable",
-        "source": infer_source(str(path)),
-    }
-
-
-def iter_yaml_documents(path: Path) -> Iterable[Dict]:
-    try:
-        content = path.read_text(encoding="utf-8")
-    except OSError:
-        return []
-
-    try:
-        docs = list(yaml.safe_load_all(content))
-    except yaml.YAMLError:
-        return []
-
-    return [doc for doc in docs if isinstance(doc, dict)]
-
-
-def parse_kubernetes_manifests(dirpath: str) -> Optional[Dict]:
-    base = Path(dirpath)
-    yaml_files = sorted(list(base.rglob("*.yaml")) + list(base.rglob("*.yml")))
-    if not yaml_files:
-        return None
-
-    deployment_name_to_app: Dict[str, str] = {}
-    app_to_deployments: Dict[str, Set[str]] = {}
-    service_name_to_selector_app: Dict[str, str] = {}
-
-    for yaml_file in yaml_files:
-        for doc in iter_yaml_documents(yaml_file):
-            kind = str(doc.get("kind", "")).strip().lower()
-            metadata = doc.get("metadata", {}) if isinstance(doc.get("metadata", {}), dict) else {}
-            name = metadata.get("name")
-            if not isinstance(name, str) or not name:
-                continue
-
-            if kind == "deployment":
-                app_label = ""
-                metadata_labels = metadata.get("labels", {})
-                if isinstance(metadata_labels, dict):
-                    app_label = str(metadata_labels.get("app", "") or "")
-
-                if not app_label:
-                    spec = doc.get("spec", {}) if isinstance(doc.get("spec", {}), dict) else {}
-                    template = spec.get("template", {}) if isinstance(spec.get("template", {}), dict) else {}
-                    template_meta = (
-                        template.get("metadata", {}) if isinstance(template.get("metadata", {}), dict) else {}
-                    )
-                    template_labels = (
-                        template_meta.get("labels", {})
-                        if isinstance(template_meta.get("labels", {}), dict)
-                        else {}
-                    )
-                    app_label = str(template_labels.get("app", "") or "")
-
-                deployment_name_to_app[name] = app_label
-                if app_label:
-                    app_to_deployments.setdefault(app_label, set()).add(name)
-
-            elif kind == "service":
-                spec = doc.get("spec", {}) if isinstance(doc.get("spec", {}), dict) else {}
-                selector = spec.get("selector", {}) if isinstance(spec.get("selector", {}), dict) else {}
-                app_label = selector.get("app")
-                if isinstance(app_label, str) and app_label:
-                    service_name_to_selector_app[name] = app_label
-
-    node_ids: Set[str] = set(deployment_name_to_app.keys()) | set(service_name_to_selector_app.keys())
-    if len(node_ids) < 2:
-        return None
-
-    nodes = [make_node(node_id) for node_id in sorted(node_ids)]
-    edges: List[Dict] = []
-    seen_edges: Set[Tuple[str, str]] = set()
-
-    for service_name, app_label in service_name_to_selector_app.items():
-        targets = app_to_deployments.get(app_label, set())
-        for deployment_name in sorted(targets):
-            edge_key = (service_name, deployment_name)
-            if edge_key in seen_edges:
-                continue
-            seen_edges.add(edge_key)
-            edges.append(make_edge(service_name, deployment_name))
-
-    return {
-        "nodes": nodes,
-        "edges": edges,
-        "label": "stable",
-        "source": infer_source(str(base)),
-    }
-
-
-def to_label_graph_input(graph: Dict) -> Dict:
     nodes = []
-    for node in graph.get("nodes", []):
-        data = node.get("data", {}) if isinstance(node.get("data", {}), dict) else {}
-        nodes.append(
-            {
-                "id": node.get("id"),
-                "type": data.get("type", "Service"),
-                "failureRatePercent": data.get("failureRatePercent", 5),
-            }
-        )
-
     edges = []
-    for edge in graph.get("edges", []):
-        edges.append(
-            {
-                "from": edge.get("source"),
-                "to": edge.get("target"),
-                "latencyMs": edge.get("latencyMs", 50),
-            }
-        )
+    service_names = set(str(k) for k in services.keys())
 
-    return {
-        "nodes": nodes,
-        "edges": edges,
-        "source": graph.get("source", "trainticket"),
-    }
+    for svc_name, svc_config in services.items():
+        svc_name = str(svc_name)
+        if not svc_config or not isinstance(svc_config, dict):
+            svc_config = {}
+
+        image = str(svc_config.get('image', '')).lower()
+        node_type, proc_ms, failure_rate = infer_node_type(svc_name, image)
+
+        label = svc_name.replace('-', ' ').replace('_', ' ').title()
+
+        nodes.append({
+            'id': svc_name,
+            'data': {
+                'label': label,
+                'type': node_type,
+                'processingPowerMs': proc_ms,
+                'failureRatePercent': failure_rate,
+                'coldStartLatencyMs': random.randint(100, 500),
+                'isActive': True,
+            }
+        })
+
+        # Edges from depends_on
+        depends = svc_config.get('depends_on', [])
+        if isinstance(depends, dict):
+            depends = list(depends.keys())
+        elif isinstance(depends, str):
+            depends = [depends]
+        elif not isinstance(depends, list):
+            depends = []
+
+        for dep in depends:
+            dep = str(dep)
+            if dep in service_names and dep != svc_name:
+                edges.append({
+                    'id': f'e-{dep}-{svc_name}',
+                    'source': dep,
+                    'target': svc_name,
+                    'latencyMs': random.randint(10, 100),
+                    'packetLossPercent': round(random.uniform(0.5, 3.0), 2),
+                    'bandwidthLimitMbps': random.randint(50, 1000),
+                })
+
+        # Edges from links
+        links = svc_config.get('links', [])
+        if isinstance(links, list):
+            for link in links:
+                linked = str(link).split(':')[0]
+                if linked in service_names and linked != svc_name:
+                    eid = f'e-{linked}-{svc_name}'
+                    if not any(e['id'] == eid for e in edges):
+                        edges.append({
+                            'id': eid,
+                            'source': linked,
+                            'target': svc_name,
+                            'latencyMs': random.randint(10, 100),
+                            'packetLossPercent': round(random.uniform(0.5, 3.0), 2),
+                            'bandwidthLimitMbps': random.randint(50, 1000),
+                        })
+
+    # If no edges found, infer from service types
+    if len(edges) == 0:
+        gateway_nodes = [n for n in nodes
+                         if n['data']['type'] in ('Gateway', 'Infrastructure')]
+        db_nodes = [n for n in nodes
+                    if n['data']['type'] in ('PostgreSQL', 'Cache', 'RabbitMQ')]
+        svc_nodes = [n for n in nodes if n['data']['type'] == 'Service']
+
+        for gw in gateway_nodes[:2]:
+            for svc in svc_nodes[:8]:
+                edges.append({
+                    'id': f'e-{gw["id"]}-{svc["id"]}',
+                    'source': gw['id'],
+                    'target': svc['id'],
+                    'latencyMs': random.randint(20, 80),
+                    'packetLossPercent': round(random.uniform(0.5, 2.0), 2),
+                    'bandwidthLimitMbps': random.randint(100, 1000),
+                })
+        for svc in svc_nodes[:8]:
+            for db in db_nodes[:3]:
+                edges.append({
+                    'id': f'e-{svc["id"]}-{db["id"]}',
+                    'source': svc['id'],
+                    'target': db['id'],
+                    'latencyMs': random.randint(5, 50),
+                    'packetLossPercent': round(random.uniform(0.1, 1.0), 2),
+                    'bandwidthLimitMbps': random.randint(200, 2000),
+                })
+
+    if len(nodes) < 2:
+        return None
+
+    return {'nodes': nodes, 'edges': edges}
+
+
+def parse_kubernetes_dir(repo_path: str, repo_name: str) -> dict | None:
+    deployments = {}
+    services = {}
+
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS
+                   and not d.startswith('.')]
+        for filename in files:
+            if not filename.endswith(('.yaml', '.yml')):
+                continue
+            filepath = os.path.join(root, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+                for doc in pyyaml.safe_load_all(content):
+                    if not isinstance(doc, dict):
+                        continue
+                    kind = str(doc.get('kind', ''))
+                    name = str(doc.get('metadata', {}).get('name', ''))
+                    if not name:
+                        continue
+                    if kind == 'Deployment':
+                        containers = (doc.get('spec', {})
+                                         .get('template', {})
+                                         .get('spec', {})
+                                         .get('containers', []))
+                        image = ''
+                        if containers and isinstance(containers, list):
+                            image = str(containers[0].get('image', ''))
+                        deployments[name] = {'image': image.lower()}
+                    elif kind == 'Service':
+                        selector = doc.get('spec', {}).get('selector', {}) or {}
+                        services[name] = {'selector': selector}
+            except Exception:
+                continue
+
+    if len(deployments) < 2:
+        return None
+
+    nodes = []
+    for dep_name, dep_info in deployments.items():
+        image = dep_info.get('image', '')
+        node_type, proc_ms, failure_rate = infer_node_type(dep_name, image)
+        nodes.append({
+            'id': dep_name,
+            'data': {
+                'label': dep_name.replace('-', ' ').title(),
+                'type': node_type,
+                'processingPowerMs': proc_ms,
+                'failureRatePercent': failure_rate,
+                'coldStartLatencyMs': random.randint(100, 600),
+                'isActive': True,
+            }
+        })
+
+    dep_names = set(deployments.keys())
+    edges = []
+
+    for svc_name, svc_info in services.items():
+        selector = svc_info.get('selector', {}) or {}
+        app_label = str(
+            selector.get('app') or
+            selector.get('app.kubernetes.io/name') or
+            selector.get('name') or ''
+        ).lower()
+
+        for dep_name in dep_names:
+            if (app_label and
+                (app_label in dep_name.lower() or
+                 dep_name.lower() in app_label) and
+                svc_name in dep_names and
+                svc_name != dep_name):
+                eid = f'e-{svc_name}-{dep_name}'
+                if not any(e['id'] == eid for e in edges):
+                    edges.append({
+                        'id': eid,
+                        'source': svc_name,
+                        'target': dep_name,
+                        'latencyMs': random.randint(5, 50),
+                        'packetLossPercent': round(random.uniform(0.1, 1.5), 2),
+                        'bandwidthLimitMbps': random.randint(100, 2000),
+                    })
+
+    # Fallback edge inference if nothing found
+    if len(edges) == 0 and len(nodes) >= 3:
+        gw_nodes = [n for n in nodes
+                    if n['data']['type'] in ('Gateway', 'Infrastructure')]
+        db_nodes = [n for n in nodes
+                    if n['data']['type'] in ('PostgreSQL', 'Cache', 'RabbitMQ')]
+        svc_nodes = [n for n in nodes if n['data']['type'] == 'Service']
+
+        for gw in gw_nodes[:2]:
+            for svc in svc_nodes[:6]:
+                edges.append({
+                    'id': f'e-{gw["id"]}-{svc["id"]}',
+                    'source': gw['id'],
+                    'target': svc['id'],
+                    'latencyMs': random.randint(20, 80),
+                    'packetLossPercent': round(random.uniform(0.5, 2.0), 2),
+                    'bandwidthLimitMbps': random.randint(100, 1000),
+                })
+        for svc in svc_nodes[:6]:
+            for db in db_nodes[:3]:
+                edges.append({
+                    'id': f'e-{svc["id"]}-{db["id"]}',
+                    'source': svc['id'],
+                    'target': db['id'],
+                    'latencyMs': random.randint(5, 50),
+                    'packetLossPercent': round(random.uniform(0.1, 1.0), 2),
+                    'bandwidthLimitMbps': random.randint(200, 2000),
+                })
+
+    if len(nodes) < 2:
+        return None
+
+    return {'nodes': nodes, 'edges': edges}
 
 
 def crawl_benchmarks(benchmarks_dir: str, output_dir: str) -> int:
-    benchmarks_path = resolve_dir(benchmarks_dir)
-    output_path = resolve_dir(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True)
 
-    parsed_graphs: List[Dict] = []
-    seen_shapes: Set[Tuple[int, int]] = set()
-    source_counter: Counter[str] = Counter()
+    # Remove old benchmark graphs so we start fresh
+    removed = 0
+    for f in os.listdir(output_dir):
+        if f.startswith('benchmark_') and f.endswith('.json'):
+            os.remove(os.path.join(output_dir, f))
+            removed += 1
+    if removed > 0:
+        print(f'Cleared {removed} old benchmark graphs before re-parsing.')
 
-    docker_files = sorted(
-        [
-            p
-            for p in benchmarks_path.rglob("*")
-            if p.is_file() and p.name.lower() in {"docker-compose.yml", "docker-compose.yaml"}
-        ]
-    )
-    for docker_file in docker_files:
-        graph = parse_docker_compose(str(docker_file))
-        if not graph:
-            continue
-        shape = (len(graph.get("nodes", [])), len(graph.get("edges", [])))
-        if shape in seen_shapes:
-            continue
-        seen_shapes.add(shape)
-        parsed_graphs.append(graph)
+    saved_count = 0
+    repo_counts = {}
+    seen_sigs = set()
+    k8s_counters = {}
 
-    k8s_dirs: List[Path] = []
-    for directory in benchmarks_path.rglob("*"):
-        if not directory.is_dir():
-            continue
-        yaml_count = sum(1 for file_path in directory.iterdir() if file_path.suffix.lower() in {".yaml", ".yml"})
-        if yaml_count >= 2:
-            k8s_dirs.append(directory)
+    repos = sorted(os.listdir(benchmarks_dir))
 
-    for k8s_dir in sorted(k8s_dirs):
-        graph = parse_kubernetes_manifests(str(k8s_dir))
-        if not graph:
-            continue
-        shape = (len(graph.get("nodes", [])), len(graph.get("edges", [])))
-        if shape in seen_shapes:
-            continue
-        seen_shapes.add(shape)
-        parsed_graphs.append(graph)
-
-    for index, graph in enumerate(parsed_graphs, start=1):
-        labelled = label_graph(to_label_graph_input(graph))
-        graph["label"] = labelled.get("label", "stable")
-
-        source = graph.get("source", "trainticket")
-        source_counter[source] += 1
-        output_file = output_path / f"benchmark_{source}_{index}.json"
-        output_file.write_text(json.dumps(graph, ensure_ascii=True), encoding="utf-8")
-
-    print("Benchmark parse summary:")
-    for source in sorted(source_counter.keys()):
-        print(f"  {source}: {source_counter[source]}")
-    print(f"  total_saved: {len(parsed_graphs)}")
-
-    return len(parsed_graphs)
-
-
-def fetch_awesome_lists() -> int:
-    token = os.getenv("GITHUB_TOKEN", "").strip()
-    if not token:
-        print("Skipping GitHub extra fetch: GITHUB_TOKEN not set")
-        return 0
-
-    session = requests.Session()
-    session.headers.update(
-        {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"token {token}",
-            "User-Agent": "InfraZero-Benchmark-Fetcher/1.0",
-        }
-    )
-
-    raw_dir = resolve_dir("./data/raw/github_extra")
-    raw_dir.mkdir(parents=True, exist_ok=True)
-
-    downloaded = 0
-    seen_repos: Set[str] = set()
-
-    for query in ADDITIONAL_QUERIES:
-        try:
-            response = session.get(
-                "https://api.github.com/search/repositories",
-                params={"q": query, "per_page": 20},
-                timeout=30,
-            )
-            response.raise_for_status()
-            payload = response.json()
-        except requests.RequestException as exc:
-            print(f"GitHub query failed for '{query}': {exc}")
+    for repo_name in tqdm(repos, desc='Parsing repos'):
+        repo_path = os.path.join(benchmarks_dir, repo_name)
+        if not os.path.isdir(repo_path):
             continue
 
-        for item in payload.get("items", []):
-            full_name = item.get("full_name")
-            default_branch = item.get("default_branch", "main")
-            if not isinstance(full_name, str) or not full_name or full_name in seen_repos:
-                continue
+        repo_graphs = 0
 
-            seen_repos.add(full_name)
-            owner_repo = full_name.split("/", 1)
-            if len(owner_repo) != 2:
-                continue
-            owner, repo = owner_repo
-
-            raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{default_branch}/docker-compose.yml"
-            try:
-                file_resp = session.get(raw_url, timeout=30)
-                if file_resp.status_code != 200:
+        # -- Pass 1: All docker-compose variants --------------------
+        for root, dirs, files in os.walk(repo_path):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS
+                       and not d.startswith('.')]
+            for filename in files:
+                if filename.lower() not in COMPOSE_FILENAMES:
                     continue
-            except requests.RequestException:
+                filepath = os.path.join(root, filename)
+                try:
+                    with open(filepath, 'r',
+                              encoding='utf-8', errors='ignore') as f:
+                        compose = pyyaml.safe_load(f)
+                    if not compose:
+                        continue
+                    graph = parse_compose_data(compose, repo_name)
+                    if graph is None:
+                        continue
+
+                    # Dedup by sorted node IDs + edge pairs - not just counts
+                    node_ids = sorted(n['id'] for n in graph['nodes'])
+                    edge_pairs = sorted(
+                        (e['source'], e['target']) for e in graph['edges']
+                    )
+                    sig_str = json.dumps({'nodes': node_ids, 'edges': edge_pairs},
+                                         sort_keys=True)
+                    sig = hashlib.md5(sig_str.encode()).hexdigest()
+
+                    if sig in seen_sigs:
+                        continue
+                    seen_sigs.add(sig)
+
+                    graph['label'] = classify_graph(
+                        graph['nodes'], graph['edges'], relaxed=True
+                    )
+                    graph['source'] = f'benchmark-{repo_name}'
+
+                    out_name = f'benchmark_{repo_name}_{repo_graphs}.json'
+                    with open(os.path.join(output_dir, out_name), 'w') as f:
+                        json.dump(graph, f, indent=2)
+
+                    repo_graphs += 1
+                    saved_count += 1
+
+                except Exception:
+                    continue
+
+        # -- Pass 2: Kubernetes yaml ---------------------------------
+        k8s = parse_kubernetes_dir(repo_path, repo_name)
+        if k8s is not None and len(k8s['nodes']) >= 2:
+            graph = k8s
+
+            # Dedup by sorted node IDs + edge pairs - not just counts
+            node_ids = sorted(n['id'] for n in graph['nodes'])
+            edge_pairs = sorted(
+                (e['source'], e['target']) for e in graph['edges']
+            )
+            sig_str = json.dumps({'nodes': node_ids, 'edges': edge_pairs},
+                                 sort_keys=True)
+            sig = hashlib.md5(sig_str.encode()).hexdigest()
+
+            if sig not in seen_sigs:
+                seen_sigs.add(sig)
+                k8s['label'] = classify_graph(
+                    k8s['nodes'], k8s['edges'], relaxed=True
+                )
+                k8s['source'] = f'benchmark-{repo_name}-k8s'
+                k8s_idx = k8s_counters.get(repo_name, 0)
+                k8s_counters[repo_name] = k8s_idx + 1
+                out_name = f'benchmark_{repo_name}_k8s_{k8s_idx}.json'
+                with open(os.path.join(output_dir, out_name), 'w') as f:
+                    json.dump(k8s, f, indent=2)
+                repo_graphs += 1
+                saved_count += 1
+
+        # ALSO try each immediate subdirectory as its own k8s graph
+        for subdir in os.listdir(repo_path):
+            subdir_path = os.path.join(repo_path, subdir)
+            if not os.path.isdir(subdir_path):
+                continue
+            if subdir.startswith('.') or subdir in SKIP_DIRS:
                 continue
 
-            safe_name = full_name.replace("/", "__")
-            output_file = raw_dir / f"{safe_name}_docker-compose.yml"
-            output_file.write_text(file_resp.text, encoding="utf-8")
-            downloaded += 1
+            sub_k8s = parse_kubernetes_dir(subdir_path, repo_name)
+            if sub_k8s is None:
+                continue
+            if len(sub_k8s['nodes']) < 2:
+                continue
 
-    print(f"GitHub extra docker-compose files downloaded: {downloaded}")
-    return downloaded
+            # Dedup check (use same hash approach from Fix 1)
+            node_ids = sorted(n['id'] for n in sub_k8s['nodes'])
+            edge_pairs = sorted(
+                (e['source'], e['target']) for e in sub_k8s['edges']
+            )
+            sig_str = json.dumps(
+                {'nodes': node_ids, 'edges': edge_pairs}, sort_keys=True
+            )
+            sub_sig = hashlib.md5(sig_str.encode()).hexdigest()
+
+            if sub_sig in seen_sigs:
+                continue
+            seen_sigs.add(sub_sig)
+
+            sub_k8s['label'] = classify_graph(
+                sub_k8s['nodes'], sub_k8s['edges'], relaxed=True
+            )
+            sub_k8s['source'] = f'benchmark-{repo_name}-k8s'
+
+            k8s_idx = k8s_counters.get(repo_name, 0)
+            k8s_counters[repo_name] = k8s_idx + 1
+            out_name = f'benchmark_{repo_name}_k8s_{k8s_idx}.json'
+
+            with open(os.path.join(output_dir, out_name), 'w') as f:
+                json.dump(sub_k8s, f, indent=2)
+
+            repo_graphs += 1
+            saved_count += 1
+
+        if repo_graphs > 0:
+            repo_counts[repo_name] = repo_graphs
+
+    print('\nBenchmark parse summary:')
+    for repo, count in sorted(repo_counts.items(), key=lambda x: -x[1]):
+        print(f'  {repo:45s}: {count} graphs')
+    print(f'\n  Total benchmark graphs saved: {saved_count}')
+    return saved_count
 
 
-if __name__ == "__main__":
-    from dotenv import load_dotenv
+if __name__ == '__main__':
+    benchmarks_dir = os.getenv('BENCHMARKS_DIR', '../data/benchmarks')
+    graphs_dir = os.getenv('GRAPHS_OUTPUT_DIR', '../data/graphs')
 
-    load_dotenv(dotenv_path=ROOT_DIR / ".env")
-    benchmarks_dir = os.getenv("BENCHMARKS_DIR", "./data/benchmarks")
-    graphs_dir = os.getenv("GRAPHS_OUTPUT_DIR", "./data/graphs")
+    if not os.path.exists(benchmarks_dir):
+        print(f'ERROR: {benchmarks_dir} does not exist.')
+        print('Run: git clone <repo> data/benchmarks/<name>')
+        sys.exit(1)
 
-    os.makedirs(resolve_dir(graphs_dir), exist_ok=True)
-    crawl_benchmarks(benchmarks_dir, graphs_dir)
-    fetch_awesome_lists()
+    print(f'Benchmarks dir : {benchmarks_dir}')
+    print(f'Output dir     : {graphs_dir}')
+    print()
 
-    graph_files = [p for p in resolve_dir(graphs_dir).glob("*.json") if p.is_file()]
-    print(f"Total graphs in dataset: {len(graph_files)}")
+    total = crawl_benchmarks(benchmarks_dir, graphs_dir)
+
+    # Count benchmark graphs in dataset
+    benchmark_files = [
+        f for f in os.listdir(graphs_dir)
+        if f.startswith('benchmark_') and f.endswith('.json')
+    ]
+    print(f'\nTotal benchmark graphs in dataset: {len(benchmark_files)}')
+
+    if len(benchmark_files) < 50:
+        print('WARNING: Less than 50 benchmark graphs.')
+        print('Clone more repos before retraining.')
+    elif len(benchmark_files) < 100:
+        print('ACCEPTABLE: 50-100 benchmark graphs.')
+        print('Cross-dataset validation will work.')
+    else:
+        print('GOOD: 100+ benchmark graphs. Ready to retrain.')

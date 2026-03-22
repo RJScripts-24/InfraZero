@@ -150,23 +150,118 @@ def graph_metrics(nodes: List[Dict], edges: List[Dict]) -> Dict[str, object]:
     }
 
 
-def classify_graph(nodes: List[Dict], edges: List[Dict]) -> str:
-    metrics = graph_metrics(nodes, edges)
+def get_failure_mode(nodes: list, edges: list, relaxed: bool = False) -> str:
+    if not nodes or not edges:
+        return 'stable'
 
-    # RULE 1: Thundering Herd
-    if metrics["single_entry"] and metrics["max_fan_out"] >= 4 and metrics["node_count"] >= 6:
-        return "thundering_herd"
+    # Build degree maps
+    out_degree = {n['id'] if isinstance(n, dict) else n: 0
+                  for n in nodes}
+    in_degree = {n['id'] if isinstance(n, dict) else n: 0
+                 for n in nodes}
 
-    # RULE 2: Retry Storm
-    if metrics["has_cycle"] and metrics["high_latency_edge_count"] >= 2:
-        return "retry_storm"
+    for edge in edges:
+        src = edge.get('source', '') if isinstance(edge, dict) else ''
+        tgt = edge.get('target', '') if isinstance(edge, dict) else ''
+        if src in out_degree:
+            out_degree[src] += 1
+        if tgt in in_degree:
+            in_degree[tgt] += 1
 
-    # RULE 3: Cascading Failure
-    if metrics["max_fan_in"] >= 3 and metrics["has_no_redundancy"] and metrics["avg_failure_rate"] >= 5.0:
-        return "cascading_failure"
+    max_fan_out = max(out_degree.values(), default=0)
+    max_fan_in = max(in_degree.values(), default=0)
+    entry_nodes = [n for n in nodes
+                   if in_degree.get(
+                       n['id'] if isinstance(n, dict) else n, 0
+                   ) == 0]
+    single_entry = len(entry_nodes) == 1
 
-    # RULE 4: Stable
-    return "stable"
+    # Cycle detection via DFS
+    def has_cycle() -> bool:
+        adj = {}
+        for e in edges:
+            s = e.get('source', '') if isinstance(e, dict) else ''
+            t = e.get('target', '') if isinstance(e, dict) else ''
+            adj.setdefault(s, []).append(t)
+        visited, rec = set(), set()
+
+        def dfs(v: str) -> bool:
+            visited.add(v)
+            rec.add(v)
+            for nb in adj.get(v, []):
+                if nb not in visited:
+                    if dfs(nb):
+                        return True
+                elif nb in rec:
+                    return True
+            rec.discard(v)
+            return False
+
+        return any(dfs(n['id'] if isinstance(n, dict) else n)
+                   for n in nodes
+                   if (n['id'] if isinstance(n, dict) else n)
+                   not in visited)
+
+    cycle = has_cycle()
+
+    # Average numeric properties
+    def avg_prop(prop: str, default: float) -> float:
+        vals = []
+        for n in nodes:
+            d = n.get('data', n) if isinstance(n, dict) else {}
+            v = d.get(prop) if isinstance(d, dict) else None
+            vals.append(float(v) if v is not None else default)
+        return sum(vals) / len(vals) if vals else default
+
+    def avg_edge_prop(prop: str, default: float) -> float:
+        vals = []
+        for e in edges:
+            v = e.get(prop) if isinstance(e, dict) else None
+            vals.append(float(v) if v is not None else default)
+        return sum(vals) / len(vals) if vals else default
+
+    avg_failure = avg_prop('failureRatePercent', 5.0)
+    avg_latency = avg_edge_prop('latencyMs', 50.0)
+
+    # Thresholds - relaxed for real benchmark architectures
+    if relaxed:
+        # Real architectures are well-designed so use softer thresholds
+        th_fan_out = 3
+        th_fan_in = 2
+        th_failure = 3
+        th_latency = 50
+        th_nodes = 4
+    else:
+        # Strict thresholds for synthetic data
+        th_fan_out = 4
+        th_fan_in = 3
+        th_failure = 5
+        th_latency = 100
+        th_nodes = 6
+
+    if len(nodes) < th_nodes:
+        return 'stable'
+
+    # Rule 1: Thundering Herd
+    if single_entry and max_fan_out >= th_fan_out:
+        return 'thundering_herd'
+
+    # Rule 2: Retry Storm
+    if cycle and avg_latency >= th_latency:
+        return 'retry_storm'
+
+    # Rule 3: Cascading Failure
+    if max_fan_in >= th_fan_in and avg_failure >= th_failure:
+        return 'cascading_failure'
+
+    return 'stable'
+
+
+def classify_graph(nodes: list, edges: list, relaxed: bool = False) -> str:
+    failure_mode = get_failure_mode(nodes, edges, relaxed=relaxed)
+    if failure_mode == 'stable':
+        return 'stable'
+    return 'unstable'
 
 
 def classify_label(graph: Dict) -> str:
@@ -220,7 +315,7 @@ def main() -> None:
 
     print(f"Labelled {labelled_count} graphs in {graphs_dir}")
     print("Label summary:")
-    label_order = ["thundering_herd", "cascading_failure", "retry_storm", "stable"]
+    label_order = ["stable", "unstable"]
     for label in label_order:
         print(f"  {label}: {label_counts.get(label, 0)}")
 
@@ -243,5 +338,31 @@ def main() -> None:
             )
 
 
+def migrate_labels_to_binary(graphs_dir: str):
+    import json
+    import os
+
+    migrated = 0
+    for f in os.listdir(graphs_dir):
+        if not f.endswith('.json'):
+            continue
+        path = os.path.join(graphs_dir, f)
+        with open(path, encoding='utf-8') as fp:
+            g = json.load(fp)
+        old_label = g.get('label', 'stable')
+        if old_label in ('thundering_herd',
+                         'cascading_failure',
+                         'retry_storm'):
+            g['label'] = 'unstable'
+            with open(path, 'w', encoding='utf-8') as fp:
+                json.dump(g, fp)
+            migrated += 1
+    print(f'Migrated {migrated} graphs to binary labels')
+    print(f'Total graphs: {len([f for f in os.listdir(graphs_dir) if f.endswith(".json")])}')
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+
+    graphs_dir = sys.argv[1] if len(sys.argv) > 1 else '../data/graphs'
+    migrate_labels_to_binary(graphs_dir)

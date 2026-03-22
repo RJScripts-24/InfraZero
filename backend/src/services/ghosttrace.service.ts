@@ -10,6 +10,7 @@ import {
 } from '../types/ghosttrace';
 import { buildDeterministicTopologyHash, orderNodesDeterministically } from '../utils/deterministicTopology';
 import { logger } from '../utils/logger';
+import { createCompletionWithFallback } from './groq.service';
 
 const DEFAULT_PROCESSING_POWER_MS = 100;
 const DEFAULT_FAILURE_RATE = 5;
@@ -534,7 +535,16 @@ export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTr
   const topologyEmbedding = mlPrediction?.topologyEmbedding ?? buildTopologyEmbedding(features);
   const graphHash = getGraphHash(nodes, edges);
   const syntheticSpans = synthesizeTraces(nodes, edges, edgeRisks, trafficPattern, graphHash);
-  const predictedAnomalyClass = mlPrediction?.predictedClass ?? predictAnomalyClass(features, edgeRisks, nodeRisks);
+  const rulePrediction = predictAnomalyClass(features, edgeRisks, nodeRisks);
+  const isRuleStable = rulePrediction.toLowerCase().startsWith('stable');
+  const predictedAnomalyClass =
+    mlPrediction === null
+      ? rulePrediction
+      : mlPrediction.predictedClass === 'stable' && mlPrediction.confidence > 0.85
+        ? 'stable'
+        : isRuleStable
+          ? 'Latency Chain Degradation'
+          : rulePrediction;
   const overallRisk = clamp(
     Math.max(
       edgeRisks[0]?.riskScore ?? 0,
@@ -545,7 +555,47 @@ export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTr
 
   const top3EdgeRisks = edgeRisks.slice(0, 3);
   const top3NodeRisks = nodeRisks.slice(0, 3);
-  const analysisNarrative = buildDeterministicNarrative(predictedAnomalyClass, top3EdgeRisks, top3NodeRisks);
+  let analysisNarrative = buildDeterministicNarrative(predictedAnomalyClass, top3EdgeRisks, top3NodeRisks);
+
+  const isAnomalous = !predictedAnomalyClass.toLowerCase().startsWith('stable');
+
+  const groqPrompt = isAnomalous
+    ? `You are a distributed systems reliability expert analyzing an architecture.
+     Predicted failure mode: ${predictedAnomalyClass}
+     Overall risk score: ${(overallRisk * 100).toFixed(0)}%
+     Top risk edges: ${JSON.stringify(edgeRisks.slice(0,3))}
+     Top risk nodes: ${JSON.stringify(nodeRisks.slice(0,3))}
+     
+     Write exactly 3 sentences:
+     1. Name the specific failure mode and which component triggers it
+     2. Explain the blast radius - what fails downstream if it triggers
+     3. Give one concrete architectural fix (be specific about component names)
+     Max 80 words. Be technical and specific.`
+    : `You are a distributed systems reliability expert analyzing an architecture.
+     This architecture appears stable with an overall risk of ${(overallRisk * 100).toFixed(0)}%.
+     Highest risk areas: ${JSON.stringify(edgeRisks.slice(0,3))}
+     
+     Write exactly 3 sentences:
+     1. Confirm the architecture is well-designed and why
+     2. Name the single highest-risk component and what could stress it
+     3. Give one proactive hardening recommendation
+     Max 80 words. Be specific about component names.`;
+
+  try {
+    const completion = await createCompletionWithFallback({
+      messages: [{ role: 'user', content: groqPrompt }],
+      temperature: 0.2,
+      max_tokens: 160,
+    });
+
+    const content = completion.choices[0]?.message?.content;
+    if (content) {
+      analysisNarrative = content.trim();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[GhostTrace] Groq narrative unavailable: ${message}`);
+  }
 
   return {
     graphHash,
