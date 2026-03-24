@@ -1,86 +1,52 @@
 {
   "model": "GhostTrace GATv2 (2-layer, 2-head attention)",
-  "dataset_size": 501,
-  "num_classes": 4,
+  "dataset_size": 28,
+  "num_classes": 2,
   "classes": [
-    "thundering_herd",
-    "cascading_failure",
-    "retry_storm",
-    "stable"
+    "stable",
+    "unstable"
   ],
   "overall": {
-    "accuracy": 0.9880239520958084,
-    "macro_precision": 0.9867256637168141,
-    "macro_recall": 0.9922680412371134,
-    "macro_f1": 0.9892551166111375,
-    "weighted_f1": 0.9880932091077246,
-    "macro_roc_auc": 0.99993676892584,
-    "macro_avg_precision": 0.9998371312190301
+    "accuracy": 0.8571428571428571,
+    "macro_precision": 0.8512820512820514,
+    "macro_recall": 0.8663101604278074,
+    "macro_f1": 0.8541666666666667,
+    "weighted_f1": 0.8586309523809524,
+    "macro_roc_auc": 0.8663101604278075,
+    "macro_avg_precision": 0.8693431568431569
   },
   "per_class": {
-    "thundering_herd": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "support": 95,
-      "roc_auc": 1.0,
-      "avg_precision": 1.0000000000000002
-    },
-    "cascading_failure": {
-      "precision": 1.0,
-      "recall": 1.0,
-      "f1": 1.0,
-      "support": 105,
-      "roc_auc": 1.0,
-      "avg_precision": 0.9999999999999999
-    },
-    "retry_storm": {
-      "precision": 0.9469026548672567,
-      "recall": 1.0,
-      "f1": 0.9727272727272728,
-      "support": 107,
-      "roc_auc": 0.9998813985483181,
-      "avg_precision": 0.9995590821490175
-    },
     "stable": {
-      "precision": 1.0,
-      "recall": 0.9690721649484536,
-      "f1": 0.9842931937172775,
-      "support": 194,
-      "roc_auc": 0.9998656771550422,
-      "avg_precision": 0.9997894427271029
+      "precision": 0.7692307692307693,
+      "recall": 0.9090909090909091,
+      "f1": 0.8333333333333334,
+      "support": 11,
+      "roc_auc": 0.8663101604278075,
+      "avg_precision": 0.8405289155289155
+    },
+    "unstable": {
+      "precision": 0.9333333333333333,
+      "recall": 0.8235294117647058,
+      "f1": 0.875,
+      "support": 17,
+      "roc_auc": 0.8663101604278075,
+      "avg_precision": 0.8981573981573981
     }
   },
   "confusion_matrix": [
     [
-      95,
-      0,
-      0,
-      0
+      10,
+      1
     ],
     [
-      0,
-      105,
-      0,
-      0
-    ],
-    [
-      0,
-      0,
-      107,
-      0
-    ],
-    [
-      0,
-      0,
-      6,
-      188
+      3,
+      14
     ]
   ],
   "research_summary": {
-    "main_result": "The GhostTrace GNN achieved 98.8% accuracy on the held-out validation set.",
-    "roc_statement": "Macro-average AUC-ROC of 1.000 indicates robust discriminative performance across failure modes.",
-    "baseline_comparison": "Outperforms random baseline (25%) by 73.8% absolute accuracy.",
-    "per_class_summary": "Best class: thundering_herd (100.0% F1). Most challenging: retry_storm (97.3% F1)."
+    "main_result": "The GhostTrace GNN achieved 85.7% accuracy on the held-out validation set.",
+    "roc_statement": "Macro-average AUC-ROC of 0.866 indicates robust discriminative performance across failure modes.",
+    "baseline_comparison": "Outperforms random baseline (50%) by 35.7% absolute accuracy.",
+    "per_class_summary": "Best class: unstable (87.5% F1). Most challenging: stable (83.3% F1)."
   }
 }

@@ -21,23 +21,22 @@ from sklearn.metrics import (
     roc_curve,
 )
 from torch import nn
+from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
-from graph_encoder import GhostTraceGNN, GraphDataset, LABEL_TO_INDEX
+from graph_encoder import GhostTraceGNN, GraphDataset, LABEL_TO_INDEX, source_aware_split
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-MODEL_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn_best.pt"
+BEST_MODEL_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn_best.pt"
+MODEL_OUTPUT_PATH = Path(__file__).resolve().parent / "ghosttrace_gnn.pt"
 TRAINING_HISTORY_PATH = Path(__file__).resolve().parent / "training_history.json"
 
-CLASSES = ["thundering_herd", "cascading_failure", "retry_storm", "stable"]
-DISPLAY_CLASSES = ["Thundering\nHerd", "Cascading\nFailure", "Retry\nStorm", "Stable"]
-CLASS_COLORS = {
-    "thundering_herd": "red",
-    "cascading_failure": "orange",
-    "retry_storm": "blue",
-    "stable": "green",
-}
+MODEL_LABELS_SORTED = [label for label, _ in sorted(LABEL_TO_INDEX.items(), key=lambda item: item[1])]
+CLASSES = MODEL_LABELS_SORTED
+DISPLAY_CLASSES = [class_name.replace("_", " ").title() for class_name in CLASSES]
+_BASE_COLORS = ["blue", "orange", "green", "red", "purple", "brown", "pink", "gray"]
+CLASS_COLORS = {class_name: _BASE_COLORS[idx % len(_BASE_COLORS)] for idx, class_name in enumerate(CLASSES)}
 
 MODEL_TO_EVAL_INDEX = {
     LABEL_TO_INDEX[class_name]: idx for idx, class_name in enumerate(CLASSES)
@@ -51,7 +50,7 @@ VAL_DATASET_LABELS: np.ndarray | None = None
 
 
 class EvalGraphClassifier(nn.Module):
-    def __init__(self, encoder: GhostTraceGNN, num_classes: int = 4) -> None:
+    def __init__(self, encoder: GhostTraceGNN, num_classes: int = len(CLASSES)) -> None:
         super().__init__()
         self.encoder = encoder
         self.head = nn.Sequential(
@@ -83,6 +82,38 @@ def _safe_avg_precision(y_true_bin: np.ndarray, y_score: np.ndarray) -> float:
     return float(average_precision_score(y_true_bin, y_score))
 
 
+def _resolve_model_path() -> Path:
+    override = os.getenv("GHOSTTRACE_EVAL_MODEL", "").strip()
+    if override:
+        override_path = Path(override)
+        if not override_path.is_absolute():
+            override_path = (Path(__file__).resolve().parent / override_path).resolve()
+        if not override_path.exists():
+            raise FileNotFoundError(f"Model checkpoint not found: {override_path}")
+        return override_path
+
+    if not MODEL_OUTPUT_PATH.exists():
+        raise FileNotFoundError(f"Model checkpoint not found: {MODEL_OUTPUT_PATH}")
+    return MODEL_OUTPUT_PATH
+
+
+def _load_eval_model(model: EvalGraphClassifier, checkpoint: object) -> float | None:
+    if isinstance(checkpoint, dict):
+        if "state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["state_dict"])
+            return None
+        if "encoder_state_dict" in checkpoint and "classifier_state_dict" in checkpoint:
+            model.encoder.load_state_dict(checkpoint["encoder_state_dict"])
+            model.head.load_state_dict(checkpoint["classifier_state_dict"])
+            threshold = checkpoint.get("decision_threshold")
+            if threshold is None:
+                return None
+            return float(threshold)
+
+    model.load_state_dict(checkpoint)
+    return None
+
+
 def load_model_and_data() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     global FULL_DATASET_LABELS, VAL_DATASET_LABELS
 
@@ -99,25 +130,27 @@ def load_model_and_data() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     full_labels_model_idx = np.array([int(dataset[i].y.item()) for i in range(len(dataset))], dtype=np.int64)
     FULL_DATASET_LABELS = np.array([MODEL_TO_EVAL_INDEX[idx] for idx in full_labels_model_idx], dtype=np.int64)
 
-    torch.manual_seed(42)
-    total = len(dataset)
-    train_size = int(0.8 * total)
-    val_size = total - train_size
-    _, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    train_indices, val_indices = source_aware_split(dataset)
+    if len(val_indices) < 5:
+        torch.manual_seed(42)
+        total = len(dataset)
+        train_size = int(0.8 * total)
+        val_size = total - train_size
+        _, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    else:
+        val_dataset = Subset(dataset, val_indices)
 
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = EvalGraphClassifier(GhostTraceGNN(), num_classes=4).to(device)
+    model = EvalGraphClassifier(GhostTraceGNN(), num_classes=len(CLASSES)).to(device)
 
-    if not MODEL_PATH.exists():
-        raise FileNotFoundError(f"Model checkpoint not found: {MODEL_PATH}")
-
-    checkpoint = torch.load(MODEL_PATH, map_location=device)
-    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["state_dict"])
-    else:
-        model.load_state_dict(checkpoint)
+    model_path = _resolve_model_path()
+    checkpoint = torch.load(model_path, map_location=device)
+    decision_threshold = _load_eval_model(model, checkpoint)
+    print(f"Loaded model checkpoint: {model_path}")
+    if decision_threshold is not None:
+        print(f"Using decision threshold: {decision_threshold:.2f}")
 
     model.eval()
     y_true_model_idx = []
@@ -129,7 +162,10 @@ def load_model_and_data() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             batch = batch.to(device)
             logits = model(batch)
             probabilities = torch.softmax(logits, dim=1)
-            predictions = torch.argmax(probabilities, dim=1)
+            if len(CLASSES) == 2 and decision_threshold is not None:
+                predictions = (probabilities[:, 1] >= decision_threshold).long()
+            else:
+                predictions = torch.argmax(probabilities, dim=1)
 
             y_true_model_idx.extend(batch.y.cpu().numpy().tolist())
             y_pred_model_idx.extend(predictions.cpu().numpy().tolist())
@@ -152,7 +188,7 @@ def load_model_and_data() -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, save_path: str) -> None:
-    cm = confusion_matrix(y_true, y_pred, labels=list(range(4)))
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(CLASSES))))
     row_sums = cm.sum(axis=1, keepdims=True)
     cm_pct = np.divide(cm, np.maximum(row_sums, 1), where=row_sums != 0)
 
@@ -181,7 +217,7 @@ def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, save_path: str
 
 
 def plot_roc_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: str) -> None:
-    y_true_one_hot = np.eye(4)[y_true]
+    y_true_one_hot = np.eye(len(CLASSES))[y_true]
 
     plt.figure(figsize=(10, 8))
 
@@ -206,7 +242,7 @@ def plot_roc_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: str) -> 
 
     if tprs:
         macro_tpr = np.mean(np.vstack(tprs), axis=0)
-        macro_auc = np.trapz(macro_tpr, macro_fpr)
+        macro_auc = np.trapezoid(macro_tpr, macro_fpr)
         plt.plot(
             macro_fpr,
             macro_tpr,
@@ -227,7 +263,7 @@ def plot_roc_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: str) -> 
 
 
 def plot_precision_recall_curves(y_true: np.ndarray, y_proba: np.ndarray, save_path: str) -> None:
-    y_true_one_hot = np.eye(4)[y_true]
+    y_true_one_hot = np.eye(len(CLASSES))[y_true]
 
     plt.figure(figsize=(10, 8))
 
@@ -274,7 +310,25 @@ def plot_training_history(save_path: str) -> None:
     history = json.loads(TRAINING_HISTORY_PATH.read_text(encoding="utf-8"))
     epochs = history.get("epochs", [])
     train_loss = history.get("train_loss", [])
-    val_accuracy = history.get("val_accuracy", [])
+    val_accuracy = history.get("val_accuracy")
+    if not val_accuracy:
+        val_accuracy = history.get("val_balanced_accuracy", [])
+
+    # Keep arrays aligned even when history schema changes across training versions.
+    if not epochs:
+        inferred_len = max(len(train_loss), len(val_accuracy))
+        epochs = list(range(1, inferred_len + 1))
+
+    if len(train_loss) != len(epochs):
+        min_len = min(len(train_loss), len(epochs))
+        train_loss = train_loss[:min_len]
+    if len(val_accuracy) != len(epochs):
+        min_len = min(len(val_accuracy), len(epochs))
+        val_accuracy = val_accuracy[:min_len]
+
+    if not epochs:
+        return
+
     best_epoch = int(history.get("best_epoch", 0))
     best_val_accuracy = float(history.get("best_val_accuracy", 0.0))
 
@@ -282,7 +336,8 @@ def plot_training_history(save_path: str) -> None:
     gs = gridspec.GridSpec(1, 2, figure=fig)
 
     ax1 = fig.add_subplot(gs[0, 0])
-    ax1.plot(epochs, train_loss, color="tab:blue", linewidth=2)
+    if train_loss:
+        ax1.plot(epochs[: len(train_loss)], train_loss, color="tab:blue", linewidth=2)
     ax1.set_title("Training Loss")
     ax1.set_xlabel("Epoch")
     ax1.set_ylabel("Loss")
@@ -290,11 +345,12 @@ def plot_training_history(save_path: str) -> None:
         ax1.axvline(best_epoch, color="gray", linestyle="--", linewidth=1.5)
 
     ax2 = fig.add_subplot(gs[0, 1])
-    ax2.plot(epochs, val_accuracy, color="tab:green", linewidth=2)
+    if val_accuracy:
+        ax2.plot(epochs[: len(val_accuracy)], val_accuracy, color="tab:green", linewidth=2)
     ax2.set_title("Validation Accuracy")
     ax2.set_xlabel("Epoch")
     ax2.set_ylabel("Accuracy")
-    if best_epoch > 0:
+    if best_epoch > 0 and val_accuracy:
         ax2.axvline(best_epoch, color="gray", linestyle="--", linewidth=1.5)
         ax2.annotate(
             f"best={best_val_accuracy:.4f}\nepoch={best_epoch}",
@@ -360,7 +416,7 @@ def plot_per_class_metrics(y_true: np.ndarray, y_pred: np.ndarray, save_path: st
     report = classification_report(
         y_true,
         y_pred,
-        labels=list(range(4)),
+        labels=list(range(len(CLASSES))),
         target_names=CLASSES,
         output_dict=True,
         zero_division=0,
@@ -405,7 +461,7 @@ def generate_metrics_report(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.
     report = classification_report(
         y_true,
         y_pred,
-        labels=list(range(4)),
+        labels=list(range(len(CLASSES))),
         target_names=CLASSES,
         output_dict=True,
         zero_division=0,
@@ -417,14 +473,8 @@ def generate_metrics_report(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.
     macro_f1 = float(report["macro avg"]["f1-score"])
     weighted_f1 = float(report["weighted avg"]["f1-score"])
 
-    try:
-        macro_roc_auc = float(
-            roc_auc_score(np.eye(4)[y_true], y_proba, multi_class="ovr", average="macro")
-        )
-    except ValueError:
-        macro_roc_auc = float("nan")
-
     per_class_ap_vals = []
+    per_class_auc_vals = []
     per_class = {}
     for idx, class_name in enumerate(CLASSES):
         y_true_bin = (y_true == idx).astype(int)
@@ -432,6 +482,8 @@ def generate_metrics_report(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.
 
         roc_auc = _safe_roc_auc(y_true_bin, y_score)
         avg_precision = _safe_avg_precision(y_true_bin, y_score)
+        if not np.isnan(roc_auc):
+            per_class_auc_vals.append(roc_auc)
         if not np.isnan(avg_precision):
             per_class_ap_vals.append(avg_precision)
 
@@ -444,9 +496,10 @@ def generate_metrics_report(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.
             "avg_precision": avg_precision,
         }
 
+    macro_roc_auc = float(np.mean(per_class_auc_vals)) if per_class_auc_vals else float("nan")
     macro_avg_precision = float(np.mean(per_class_ap_vals)) if per_class_ap_vals else float("nan")
 
-    cm = confusion_matrix(y_true, y_pred, labels=list(range(4))).astype(int).tolist()
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(CLASSES)))).astype(int).tolist()
 
     best_class = max(CLASSES, key=lambda c: per_class[c]["f1"])
     worst_class = min(CLASSES, key=lambda c: per_class[c]["f1"])
@@ -456,7 +509,7 @@ def generate_metrics_report(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.
     return {
         "model": "GhostTrace GATv2 (2-layer, 2-head attention)",
         "dataset_size": int(len(y_true)),
-        "num_classes": 4,
+        "num_classes": len(CLASSES),
         "classes": CLASSES,
         "overall": {
             "accuracy": accuracy,
@@ -472,7 +525,10 @@ def generate_metrics_report(y_true: np.ndarray, y_pred: np.ndarray, y_proba: np.
         "research_summary": {
             "main_result": f"The GhostTrace GNN achieved {accuracy:.1%} accuracy on the held-out validation set.",
             "roc_statement": f"Macro-average AUC-ROC of {macro_roc_auc:.3f} indicates robust discriminative performance across failure modes.",
-            "baseline_comparison": f"Outperforms random baseline (25%) by {accuracy - 0.25:.1%} absolute accuracy.",
+            "baseline_comparison": (
+                f"Outperforms random baseline ({1.0 / len(CLASSES):.0%}) "
+                f"by {accuracy - (1.0 / len(CLASSES)):.1%} absolute accuracy."
+            ),
             "per_class_summary": (
                 f"Best class: {best_class} ({best_f1:.1%} F1). "
                 f"Most challenging: {worst_class} ({worst_f1:.1%} F1)."
