@@ -14,6 +14,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { DEFAULT_ARCHITECTURE_ICON } from '../lib/architectureIcons';
 
 interface EdgeRiskScore {
   edgeId: string;
@@ -172,15 +173,23 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
       <Handle type="target" position={Position.Bottom} id="bottom-target" style={hs} />
 
       <div className="flex items-start justify-between mb-3">
-        <div style={{
-          color: isSelected ? '#FFFFFF' : '#E4E4E7', // Zinc-200
-          fontSize: '15px',
-          fontWeight: isSelected ? 700 : 600,
-          fontFamily: 'Inter, sans-serif',
-          letterSpacing: '-0.01em',
-          textDecoration: data.isKilled ? 'line-through' : 'none',
-        }}>
-          {data.label}
+        <div className="flex items-start gap-3">
+          <img
+            src={data.iconPath || DEFAULT_ARCHITECTURE_ICON}
+            alt={data.label || 'service icon'}
+            className="mt-0.5 h-8 w-8 rounded-md bg-black/30 p-1 object-contain"
+            draggable={false}
+          />
+          <div style={{
+            color: isSelected ? '#FFFFFF' : '#E4E4E7', // Zinc-200
+            fontSize: '15px',
+            fontWeight: isSelected ? 700 : 600,
+            fontFamily: 'Inter, sans-serif',
+            letterSpacing: '-0.01em',
+            textDecoration: data.isKilled ? 'line-through' : 'none',
+          }}>
+            {data.label}
+          </div>
         </div>
         {data.isSimulating && nodeMetric && (
           <div

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Share2,
@@ -33,6 +33,7 @@ import { BreachRoomPanel, type BreachRoomResult } from '../components/BreachRoom
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
 import { ReportView } from '../components/ReportView';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
+import { PRIMITIVE_ITEMS, iconForNode, resolvePrimitiveByText, type PrimitiveItem } from '../lib/architectureIcons';
 import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
 import { initCollaboration, destroyCollaboration, setLocalUser, setLocalCursor } from '../../lib/collaboration';
 import type { WorkspaceLoaderData } from '../routes';
@@ -51,16 +52,7 @@ const edgeBase = {
 
 const initialEdges: Edge[] = [];
 
-const componentList = [
-  { id: 'load-balancer', name: 'Load Balancer',  type: 'Infrastructure' },
-  { id: 'api-gateway',   name: 'API Gateway',    type: 'Gateway' },
-  { id: 'auth-service',  name: 'Auth Service',   type: 'Service' },
-  { id: 'database',      name: 'Database',       type: 'PostgreSQL' },
-  { id: 'redis-cache',   name: 'Redis Cache',    type: 'Cache' },
-  { id: 'queue',         name: 'Queue',          type: 'RabbitMQ' },
-  { id: 'worker',        name: 'Worker',         type: 'Background Job' },
-  { id: 'cdn',           name: 'CDN',            type: 'Edge Network' },
-];
+const componentList = PRIMITIVE_ITEMS;
 
 const wsUrlFromEnv = (() => {
   const explicit = import.meta.env.VITE_WS_URL as string | undefined;
@@ -85,6 +77,10 @@ const normalizeNodes = (input: any): Node[] => {
       seenNodeIds.set(baseId, dupCount + 1);
       const uniqueId = dupCount === 0 ? baseId : `${baseId}-${dupCount}`;
 
+      const label = n.data?.label || n.label || `Service ${idx + 1}`;
+      const type = n.data?.type || n.type || 'Node Service';
+      const resolved = resolvePrimitiveByText(label, type, n.id);
+
       return {
         id: uniqueId,
         type: 'custom',
@@ -94,8 +90,9 @@ const normalizeNodes = (input: any): Node[] => {
         },
         data: {
           ...(n.data || {}),
-          label: n.data?.label || n.label || `Service ${idx + 1}`,
-          type: n.data?.type || n.type || 'Node Service',
+          label,
+          type,
+          iconPath: n.data?.iconPath || resolved?.iconPath || iconForNode(label, type),
           isActive: true,
         },
       };
@@ -257,6 +254,14 @@ export default function WorkspacePage() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const primitiveSections = useMemo(() => {
+    const grouped = componentList.reduce<Record<string, PrimitiveItem[]>>((acc, item) => {
+      if (!acc[item.section]) acc[item.section] = [];
+      acc[item.section].push(item);
+      return acc;
+    }, {});
+    return Object.entries(grouped);
+  }, []);
 
   useEffect(() => {
     nodesCountRef.current = nodes.length;
@@ -511,14 +516,19 @@ export default function WorkspacePage() {
           id: `${Date.now()}`,
           type: 'custom',
           position,
-          data: { label: componentData.name, type: componentData.type, isActive: false },
+          data: {
+            label: componentData.name,
+            type: componentData.type,
+            iconPath: componentData.iconPath || iconForNode(componentData.name, componentData.type),
+            isActive: false,
+          },
         }),
       );
     },
     [rfInstance, setNodes],
   );
 
-  const onDragStart = (e: React.DragEvent, component: (typeof componentList)[0]) => {
+  const onDragStart = (e: React.DragEvent, component: PrimitiveItem) => {
     e.dataTransfer.setData('application/reactflow', 'custom');
     e.dataTransfer.setData('application/json', JSON.stringify(component));
     e.dataTransfer.effectAllowed = 'move';
@@ -1111,18 +1121,33 @@ export default function WorkspacePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-3">
-                    {componentList.map((component) => (
-                      <motion.div
-                        key={component.id}
-                        whileHover={{ x: 4, scale: 1.02 }}
-                        className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 cursor-grab active:cursor-grabbing hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
-                        draggable
-                        onDragStartCapture={(e) => onDragStart(e, component)}
-                      >
-                         <div className="text-zinc-200 font-bold text-sm mb-1">{component.name}</div>
-                         <div className="text-zinc-600 text-[10px] uppercase font-bold tracking-widest">{component.type}</div>
-                      </motion.div>
+                  <div className="space-y-5">
+                    {primitiveSections.map(([section, items]) => (
+                      <div key={section}>
+                        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">{section}</div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {items.map((component) => (
+                            <motion.div
+                              key={component.id}
+                              whileHover={{ x: 4, scale: 1.02 }}
+                              className="flex items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/5 cursor-grab active:cursor-grabbing hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
+                              draggable
+                              onDragStartCapture={(e) => onDragStart(e, component)}
+                            >
+                              <img
+                                src={component.iconPath}
+                                alt={component.name}
+                                className="h-7 w-7 rounded object-contain bg-black/30 p-1"
+                                loading="lazy"
+                              />
+                              <div>
+                                <div className="text-zinc-200 font-bold text-sm mb-1">{component.name}</div>
+                                <div className="text-zinc-600 text-[10px] uppercase font-bold tracking-widest">{component.type}</div>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
