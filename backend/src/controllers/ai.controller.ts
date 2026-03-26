@@ -136,11 +136,8 @@ RULES:
         const rawNodes = Array.isArray(parsed.nodes) ? parsed.nodes : [];
         const sourceW = Math.max(1, toNum(imageWidth, 1000));
         const sourceH = Math.max(1, toNum(imageHeight, 700));
-        const targetW = 1200;
-        const targetH = 700;
-        const padX = 80;
-        const padY = 60;
-        const minNodeGap = 80;
+        const importScale = 0.9;
+        const minNodeGap = 230;
 
         const xs = rawNodes.map((n: any) => toNum(n?.x, NaN)).filter((v: number) => Number.isFinite(v));
         const ys = rawNodes.map((n: any) => toNum(n?.y, NaN)).filter((v: number) => Number.isFinite(v));
@@ -188,27 +185,39 @@ RULES:
         const maxNodeX = imageSpaceNodes.length ? Math.max(...imageSpaceNodes.map((n: any) => n.x)) : sourceW;
         const minY = imageSpaceNodes.length ? Math.min(...imageSpaceNodes.map((n: any) => n.y)) : 0;
         const maxNodeY = imageSpaceNodes.length ? Math.max(...imageSpaceNodes.map((n: any) => n.y)) : sourceH;
-        const bboxW = Math.max(1, maxNodeX - minX);
-        const bboxH = Math.max(1, maxNodeY - minY);
-        const availableW = Math.max(1, targetW - padX * 2);
-        const availableH = Math.max(1, targetH - padY * 2);
+        const centerX = (minX + maxNodeX) / 2;
+        const centerY = (minY + maxNodeY) / 2;
 
-        // Uniform scaling preserves relative spacing from the source image.
-        const fitScale = Math.min(availableW / bboxW, availableH / bboxH);
-        const idealScaleFromGap = imageSpaceNodes.length > 1
-            ? Math.min(2.4, Math.max(1, minNodeGap / Math.max(1, Math.min(bboxW, bboxH) / Math.sqrt(imageSpaceNodes.length))))
-            : 1;
-        const scale = Math.min(fitScale, fitScale * idealScaleFromGap);
-        const scaledW = bboxW * scale;
-        const scaledH = bboxH * scale;
-        const offsetX = padX + (availableW - scaledW) / 2;
-        const offsetY = padY + (availableH - scaledH) / 2;
-
-        const normalizedCoordinates = imageSpaceNodes.map((n: any) => ({
+        // Minimize diagram uniformly while preserving exact relative geometry.
+        const positionedNodes = imageSpaceNodes.map((n: any) => ({
             ...n,
-            x: offsetX + (n.x - minX) * scale,
-            y: offsetY + (n.y - minY) * scale,
+            x: centerX + (n.x - centerX) * importScale,
+            y: centerY + (n.y - centerY) * importScale,
         }));
+
+        // Light deterministic de-overlap pass so close detections do not collapse visually.
+        for (let i = 0; i < positionedNodes.length; i += 1) {
+            for (let j = i + 1; j < positionedNodes.length; j += 1) {
+                const a = positionedNodes[i];
+                const b = positionedNodes[j];
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const distance = Math.hypot(dx, dy);
+
+                if (distance > 0 && distance < minNodeGap) {
+                    const push = (minNodeGap - distance) / 2;
+                    const ux = dx / distance;
+                    const uy = dy / distance;
+
+                    a.x = Math.max(0, Math.min(sourceW, a.x - ux * push));
+                    a.y = Math.max(0, Math.min(sourceH, a.y - uy * push));
+                    b.x = Math.max(0, Math.min(sourceW, b.x + ux * push));
+                    b.y = Math.max(0, Math.min(sourceH, b.y + uy * push));
+                }
+            }
+        }
+
+        const normalizedCoordinates = positionedNodes;
 
         // Ensure nodes have required React Flow fields
         const nodes = normalizedCoordinates.map((n: any) => ({

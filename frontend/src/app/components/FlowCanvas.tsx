@@ -5,6 +5,7 @@ import {
   Controls,
   MiniMap,
   Handle,
+  NodeResizer,
   Position,
   type Node,
   type Edge,
@@ -15,6 +16,40 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { DEFAULT_ARCHITECTURE_ICON } from '../lib/architectureIcons';
+
+const normalizeIconPath = (rawPath?: string | null): string => {
+  if (!rawPath || typeof rawPath !== 'string') {
+    return DEFAULT_ARCHITECTURE_ICON;
+  }
+
+  const normalized = rawPath.replace(/\\/g, '/').trim();
+  if (!normalized) {
+    return DEFAULT_ARCHITECTURE_ICON;
+  }
+
+  if (normalized.startsWith('/icons/')) {
+    return `/Icons/${normalized.slice('/icons/'.length)}`;
+  }
+
+  return normalized;
+};
+
+const ICON_MAP: Record<string, string> = {
+  Infrastructure: '/Icons/aws/networking/Elastic-Load-Balancing.svg',
+  'Load Balancer': '/Icons/aws/networking/Elastic-Load-Balancing.svg',
+  Gateway: '/Icons/aws/networking/Amazon-API-Gateway.svg',
+  Database: '/Icons/aws/database/Amazon-RDS.svg',
+  PostgreSQL: '/Icons/generic/postgresql.svg',
+  Cache: '/Icons/aws/database/Amazon-ElastiCache.svg',
+  'Node Service': '/Icons/aws/compute/Amazon-EC2.svg',
+  Service: '/Icons/aws/compute/AWS-Lambda.svg',
+  RabbitMQ: '/Icons/generic/rabbitmq.svg',
+  'Background Job': '/Icons/aws/compute/AWS-Batch.svg',
+  'Edge Network': '/Icons/aws/networking/Amazon-CloudFront.svg',
+  Kafka: '/Icons/generic/kafka.svg',
+  Kubernetes: '/Icons/generic/kubernetes.svg',
+  Docker: '/Icons/generic/docker.svg',
+};
 
 interface EdgeRiskScore {
   edgeId: string;
@@ -42,8 +77,14 @@ const handleStyleBase = {
 const handleHidden  = { ...handleStyleBase, opacity: 0 };
 const handleVisible = { ...handleStyleBase, opacity: 1 };
 
-const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
+const CustomNode = memo(({ id, data, selected }: { id: string; data: any; selected?: boolean }) => {
   const [hovered, setHovered] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [localLabel, setLocalLabel] = useState(data.label || 'Service');
+
+  useEffect(() => {
+    setLocalLabel(data.label || 'Service');
+  }, [data.label]);
 
   const currentSnapshot = data.simulationSnapshots?.[data.currentTick];
   const nodeMetrics = currentSnapshot?.nodeMetrics || currentSnapshot?.node_metrics || [];
@@ -99,7 +140,7 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
   if (data.isActive)     statusColor = '#3B82F6';
   if (data.isOverloaded) statusColor = '#EF4444';
 
-  const isSelected = !!data.selected;
+  const isSelected = Boolean(selected || data.selected);
 
   const borderColor = showGhostRisk && ghostRisk > 0.6
     ? 'rgba(245,158,11,0.8)'
@@ -122,6 +163,16 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
     data.isKilled ? 'ring-2 ring-red-500 opacity-40' : '',
     !data.isKilled && data.isDegraded ? 'ring-2 ring-amber-500 opacity-70' : '',
   ].filter(Boolean).join(' ');
+  const resolvedIcon = normalizeIconPath(data.iconPath || ICON_MAP[data.label] || ICON_MAP[data.type] || DEFAULT_ARCHITECTURE_ICON);
+
+  const commitLabel = () => {
+    const nextLabel = localLabel.trim() || 'Service';
+    data.label = nextLabel;
+    if (typeof data.onLabelChange === 'function') {
+      data.onLabelChange(String(id), nextLabel);
+    }
+    setEditing(false);
+  };
 
   return (
     <div
@@ -135,17 +186,20 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
         borderColor,
         borderWidth: isSelected ? '2px' : '1px',
         borderStyle: 'solid',
-        padding: '16px 20px',
-        minWidth: '200px',
+        padding: '10px 14px',
+        minWidth: '160px',
+        minHeight: '80px',
         boxShadow: combinedShadow,
-        borderRadius: '16px',
+        borderRadius: '10px',
         transition: 'all 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
+      <NodeResizer minWidth={160} minHeight={80} isVisible={isSelected} />
+
       {showGhostRisk && ghostRisk > 0.3 && (
-        <div className="absolute right-9 top-3 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200">
+        <div className="absolute left-3 top-3 rounded-full border border-amber-400/25 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200">
           Risk: {Math.round(ghostRisk * 100)}%
         </div>
       )}
@@ -172,51 +226,90 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
       <Handle type="target" position={Position.Right}  id="right"         style={hs} />
       <Handle type="target" position={Position.Bottom} id="bottom-target" style={hs} />
 
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-start gap-3">
+      <div className="absolute right-3 top-3" style={{
+        width: '6px',
+        height: '6px',
+        borderRadius: '50%',
+        backgroundColor: statusColor,
+        boxShadow: data.isActive ? `0 0 10px ${statusColor}` : 'none',
+        transition: 'all 0.4s ease',
+      }} />
+
+      <div className="flex h-full w-full flex-col items-center justify-center text-center gap-2">
+        <div className="flex h-6 w-6 items-center justify-center rounded-lg border border-white/10 bg-black/35 overflow-hidden">
           <img
-            src={data.iconPath || DEFAULT_ARCHITECTURE_ICON}
-            alt={data.label || 'service icon'}
-            className="mt-0.5 h-8 w-8 rounded-md bg-black/30 p-1 object-contain"
+            src={resolvedIcon}
+            alt={localLabel || 'service icon'}
+            className="h-6 w-6 object-contain"
             draggable={false}
+            onError={(event) => {
+              const current = event.currentTarget;
+              if (current.src.endsWith(DEFAULT_ARCHITECTURE_ICON)) {
+                current.style.display = 'none';
+                return;
+              }
+              current.src = DEFAULT_ARCHITECTURE_ICON;
+            }}
           />
-          <div style={{
-            color: isSelected ? '#FFFFFF' : '#E4E4E7', // Zinc-200
-            fontSize: '15px',
-            fontWeight: isSelected ? 700 : 600,
-            fontFamily: 'Inter, sans-serif',
-            letterSpacing: '-0.01em',
-            textDecoration: data.isKilled ? 'line-through' : 'none',
-          }}>
-            {data.label}
-          </div>
         </div>
+
+        {editing ? (
+          <input
+            autoFocus
+            value={localLabel}
+            onChange={(event) => setLocalLabel(event.target.value)}
+            onBlur={commitLabel}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                commitLabel();
+              }
+            }}
+            className="w-full rounded-lg border border-white/15 bg-black/40 px-2 py-1 text-center text-[13px] font-semibold text-white outline-none focus:border-blue-500/50"
+          />
+        ) : (
+          <div
+            onDoubleClick={() => setEditing(true)}
+            style={{
+              color: isSelected ? '#FFFFFF' : '#E4E4E7',
+              fontSize: '13px',
+              fontWeight: isSelected ? 700 : 600,
+              fontFamily: 'Inter, sans-serif',
+              letterSpacing: '-0.01em',
+              textDecoration: data.isKilled ? 'line-through' : 'none',
+              cursor: 'text',
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {localLabel}
+          </div>
+        )}
+
+        <div style={{
+          color: isSelected ? '#93C5FD' : '#71717A',
+          fontSize: '10px',
+          fontFamily: 'JetBrains Mono, monospace',
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          fontWeight: 700,
+          maxWidth: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {data.type}
+        </div>
+
         {data.isSimulating && nodeMetric && (
           <div
-            className="text-[9px] font-mono mt-1 opacity-70"
+            className="text-[9px] font-mono opacity-70"
             style={{ color: metricQueueDepth > 50 ? '#ef4444' : '#6b7280' }}
           >
             Q:{metricQueueDepth}
           </div>
         )}
-        <div style={{
-          width: '8px', height: '8px', borderRadius: '50%',
-          backgroundColor: statusColor,
-          marginTop: '4px', flexShrink: 0,
-          boxShadow: data.isActive ? `0 0 10px ${statusColor}` : 'none',
-          transition: 'all 0.4s ease',
-        }} />
-      </div>
-
-      <div style={{
-        color: isSelected ? '#93C5FD' : '#71717A', // Blue-300 : Zinc-400
-        fontSize: '11px',
-        fontFamily: 'JetBrains Mono, monospace',
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        fontWeight: 600,
-      }}>
-        {data.type}
       </div>
 
       <Handle type="source" position={Position.Top}    id="top-source"   style={hs} />
@@ -229,12 +322,45 @@ const CustomNode = memo(({ id, data }: { id: string; data: any }) => {
 
 CustomNode.displayName = 'CustomNode';
 
+const GroupNode = memo(({ data, selected }: { data: any; selected?: boolean }) => (
+  <div
+    style={{
+      width: '100%',
+      height: '100%',
+      border: '2px dashed rgba(59,130,246,0.4)',
+      borderRadius: '12px',
+      backgroundColor: 'rgba(59,130,246,0.03)',
+      position: 'relative',
+    }}
+  >
+    <NodeResizer minWidth={200} minHeight={150} isVisible={Boolean(selected)} />
+    <div
+      style={{
+        position: 'absolute',
+        top: -12,
+        left: 12,
+        background: '#000',
+        padding: '2px 10px',
+        borderRadius: '6px',
+        border: '1px solid rgba(59,130,246,0.3)',
+        color: '#60a5fa',
+        fontSize: '11px',
+        fontWeight: 700,
+        fontFamily: 'JetBrains Mono, monospace',
+        textTransform: 'uppercase',
+      }}
+    >
+      {data.label || 'Group'}
+    </div>
+  </div>
+));
+
+GroupNode.displayName = 'GroupNode';
+
 const nodeTypes: NodeTypes = {
   custom: CustomNode,
+  group: GroupNode,
 };
-
-// Subtle canvas grain
-const NOISE_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
 
 interface FlowCanvasProps {
   nodes: Node[];
@@ -246,6 +372,9 @@ interface FlowCanvasProps {
   onInit: (instance: any) => void;
   onDrop: (event: React.DragEvent) => void;
   onDragOver: (event: React.DragEvent) => void;
+  onNodeContextMenu?: (event: React.MouseEvent, node: Node) => void;
+  onPaneContextMenu?: (event: React.MouseEvent) => void;
+  onNodeLabelChange?: (nodeId: string, label: string) => void;
   killedNodes?: Set<string>;
   degradedNodes?: Set<string>;
   simulationSnapshots?: Array<{
@@ -276,6 +405,9 @@ export const FlowCanvas = memo(({
   onInit,
   onDrop,
   onDragOver,
+  onNodeContextMenu,
+  onPaneContextMenu,
+  onNodeLabelChange,
   killedNodes,
   degradedNodes,
   simulationSnapshots,
@@ -326,11 +458,16 @@ export const FlowCanvas = memo(({
       ghostRisk: (node.data as { ghostRisk?: number } | undefined)?.ghostRisk ?? nodeRiskById.get(node.id),
       isKilled: killedNodes?.has(node.id) ?? false,
       isDegraded: degradedNodes?.has(node.id) ?? false,
+      iconPath: (node.data as { iconPath?: string } | undefined)?.iconPath
+        || ICON_MAP[(node.data as { label?: string } | undefined)?.label || '']
+        || ICON_MAP[(node.data as { type?: string } | undefined)?.type || '']
+        || DEFAULT_ARCHITECTURE_ICON,
+      onLabelChange: onNodeLabelChange,
       simulationSnapshots,
       currentTick,
       isSimulating,
     },
-  })), [nodes, nodeRiskById, killedNodes, degradedNodes, simulationSnapshots, currentTick, isSimulating]);
+  })), [nodes, nodeRiskById, killedNodes, degradedNodes, simulationSnapshots, currentTick, isSimulating, onNodeLabelChange]);
 
   const decoratedEdges = useMemo(() => edges.map((edge) => {
     if ((simulationSnapshots?.length ?? 0) > 0) {
@@ -376,14 +513,22 @@ export const FlowCanvas = memo(({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          onNodeContextMenu?.(event as unknown as React.MouseEvent, node);
+        }}
+        onPaneContextMenu={(event) => {
+          event.preventDefault();
+          onPaneContextMenu?.(event as unknown as React.MouseEvent);
+        }}
         nodeTypes={nodeTypes}
         fitView
-        style={{ backgroundColor: '#000000' }}
+        style={{ backgroundColor: '#0a0a0f' }}
         onInit={onInit}
         onDrop={onDrop}
         onDragOver={onDragOver}
       >
-        <Background gap={32} size={1} color="rgba(59,130,246,0.06)" />
+        <Background gap={32} size={1} color="rgba(59,130,246,0.10)" />
         <Controls
           style={{
             backgroundColor: 'rgba(24, 24, 27, 0.4)',
@@ -404,32 +549,6 @@ export const FlowCanvas = memo(({
           }}
         />
       </ReactFlow>
-
-      {/* Layer 1 — Radial blue glow */}
-      <div
-        style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-          background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(59,130,246,0.04) 0%, transparent 80%)',
-        }}
-      />
-
-      {/* Layer 2 — Radial depth falloff */}
-      <div
-        style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-          background: 'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.5) 100%)',
-        }}
-      />
-
-      {/* Layer 3 — Grain */}
-      <div
-        style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-          opacity: 0.03,
-          backgroundImage: NOISE_SVG,
-          mixBlendMode: 'overlay',
-        }}
-      />
     </div>
   );
 });

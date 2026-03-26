@@ -4,6 +4,8 @@ import {
   Share2,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Shuffle,
   Edit3,
   Sparkles,
   Check,
@@ -33,7 +35,7 @@ import { BreachRoomPanel, type BreachRoomResult } from '../components/BreachRoom
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
 import { ReportView } from '../components/ReportView';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
-import { PRIMITIVE_ITEMS, iconForNode, resolvePrimitiveByText, type PrimitiveItem } from '../lib/architectureIcons';
+import { DEFAULT_ARCHITECTURE_ICON, PRIMITIVE_ITEMS, iconForNode, resolvePrimitiveByText, type PrimitiveItem } from '../lib/architectureIcons';
 import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
 import { initCollaboration, destroyCollaboration, setLocalUser, setLocalCursor } from '../../lib/collaboration';
 import type { WorkspaceLoaderData } from '../routes';
@@ -52,7 +54,70 @@ const edgeBase = {
 
 const initialEdges: Edge[] = [];
 
-const componentList = PRIMITIVE_ITEMS;
+type LibraryItem = {
+  id: string;
+  name: string;
+  type: string;
+  iconPath: string;
+};
+
+type LibraryCategory = {
+  category: string;
+  items: LibraryItem[];
+};
+
+const ICON_RENDER_LIMIT_PER_CATEGORY = 80;
+
+const normalizeIconPath = (rawPath?: string | null): string => {
+  if (!rawPath || typeof rawPath !== 'string') {
+    return DEFAULT_ARCHITECTURE_ICON;
+  }
+
+  const forwardSlashPath = rawPath.replace(/\\/g, '/').trim();
+  if (!forwardSlashPath) {
+    return DEFAULT_ARCHITECTURE_ICON;
+  }
+
+  if (forwardSlashPath.startsWith('/icons/')) {
+    return `/Icons/${forwardSlashPath.slice('/icons/'.length)}`;
+  }
+
+  return forwardSlashPath;
+};
+
+const COMPONENT_LIBRARY: LibraryCategory[] = (() => {
+  const grouped = PRIMITIVE_ITEMS.reduce<Record<string, LibraryItem[]>>((acc, item: PrimitiveItem) => {
+    const category = item.section || 'Other';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+
+    acc[category].push({
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      iconPath: normalizeIconPath(item.iconPath),
+    });
+
+    return acc;
+  }, {});
+
+  const categories: LibraryCategory[] = Object.entries(grouped).map(([category, items]) => ({
+    category,
+    items,
+  }));
+
+  categories.push({
+    category: 'Layout',
+    items: [
+      { id: 'vpc', name: 'VPC', type: 'group', iconPath: '/Icons/aws/networking/Amazon-VPC.svg' },
+      { id: 'cluster', name: 'Cluster', type: 'group', iconPath: '/Icons/generic/kubernetes.svg' },
+      { id: 'container', name: 'Service Group', type: 'group', iconPath: DEFAULT_ARCHITECTURE_ICON },
+    ],
+  });
+
+  return categories;
+})();
 
 const wsUrlFromEnv = (() => {
   const explicit = import.meta.env.VITE_WS_URL as string | undefined;
@@ -92,7 +157,7 @@ const normalizeNodes = (input: any): Node[] => {
           ...(n.data || {}),
           label,
           type,
-          iconPath: n.data?.iconPath || resolved?.iconPath || iconForNode(label, type),
+          iconPath: normalizeIconPath(n.data?.iconPath || resolved?.iconPath || iconForNode(label, type)),
           isActive: true,
         },
       };
@@ -104,13 +169,38 @@ const normalizeEdges = (input: any): Edge[] => {
   const seenEdgeIds = new Map<string, number>();
   const seenConnections = new Set<string>();
 
+  const normalizeSourceHandle = (value: unknown): string => {
+    const handle = String(value || '').toLowerCase();
+    if (handle === 'top' || handle === 'top-source') return 'top-source';
+    if (handle === 'left' || handle === 'left-source') return 'left-source';
+    if (handle === 'right' || handle === 'right-source') return 'right-source';
+    if (handle === 'bottom-target') return 'bottom';
+    return 'bottom';
+  };
+
+  const normalizeTargetHandle = (value: unknown): string => {
+    const handle = String(value || '').toLowerCase();
+    if (handle === 'top' || handle === 'top-source') return 'top';
+    if (handle === 'left' || handle === 'left-source') return 'left';
+    if (handle === 'right' || handle === 'right-source') return 'right';
+    if (handle === 'bottom' || handle === 'bottom-source' || handle === 'bottom-target') return 'bottom-target';
+    return 'top';
+  };
+
+  const normalizeEdgeType = (value: unknown): string => {
+    const edgeType = String(value || '').toLowerCase();
+    if (edgeType === 'straight') return 'straight';
+    if (edgeType === 'smoothstep') return 'smoothstep';
+    return 'smoothstep';
+  };
+
   return input
     .filter((e) => e && typeof e === 'object' && e.source != null && e.target != null)
     .map((e: any, idx: number) => {
       const source = String(e.source);
       const target = String(e.target);
-      const sourceHandle = e.sourceHandle || 'bottom';
-      const targetHandle = e.targetHandle || 'top';
+      const sourceHandle = normalizeSourceHandle(e.sourceHandle);
+      const targetHandle = normalizeTargetHandle(e.targetHandle);
 
       const baseId = String(e.id ?? `e-${source}-${target}-${idx}`);
       const dupCount = seenEdgeIds.get(baseId) ?? 0;
@@ -126,6 +216,7 @@ const normalizeEdges = (input: any): Edge[] => {
       return {
         ...edgeBase,
         ...e,
+        type: normalizeEdgeType(e.type),
         id: uniqueId,
         source,
         target,
@@ -151,6 +242,81 @@ const sanitizeGraph = (rawNodes: any, rawEdges: any): { nodes: Node[]; edges: Ed
     nodes: normalizedNodes,
     edges: normalizedEdges,
   };
+};
+
+const resolveNodeOverlaps = (nodes: Node[]): Node[] => {
+  if (nodes.length <= 1) {
+    return nodes;
+  }
+
+  const CARD_WIDTH = 230;
+  const CARD_HEIGHT = 130;
+  const GAP_X = 26;
+  const GAP_Y = 20;
+  const MAX_ITERATIONS = 12;
+  const EPSILON = 0.01;
+
+  const adjusted = nodes.map((node) => ({
+    ...node,
+    position: {
+      x: Number(node.position?.x ?? 0),
+      y: Number(node.position?.y ?? 0),
+    },
+  }));
+
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration += 1) {
+    let moved = false;
+
+    for (let i = 0; i < adjusted.length; i += 1) {
+      for (let j = i + 1; j < adjusted.length; j += 1) {
+        const a = adjusted[i];
+        const b = adjusted[j];
+
+        const dx = b.position.x - a.position.x;
+        const dy = b.position.y - a.position.y;
+        const overlapX = CARD_WIDTH + GAP_X - Math.abs(dx);
+        const overlapY = CARD_HEIGHT + GAP_Y - Math.abs(dy);
+
+        if (overlapX <= 0 || overlapY <= 0) {
+          continue;
+        }
+
+        moved = true;
+
+        if (overlapX < overlapY) {
+          const push = overlapX / 2;
+          if (dx >= 0) {
+            a.position.x -= push;
+            b.position.x += push;
+          } else {
+            a.position.x += push;
+            b.position.x -= push;
+          }
+        } else {
+          const push = overlapY / 2;
+          if (dy >= 0) {
+            a.position.y -= push;
+            b.position.y += push;
+          } else {
+            a.position.y += push;
+            b.position.y -= push;
+          }
+        }
+      }
+    }
+
+    if (!moved) {
+      break;
+    }
+
+    // Snap tiny floating-point drift to keep deterministic stable layout.
+    for (const node of adjusted) {
+      if (Math.abs(node.position.x) < EPSILON) node.position.x = 0;
+      if (Math.abs(node.position.y) < EPSILON) node.position.y = 0;
+    }
+  }
+
+  return adjusted;
 };
 
 const extractGraphPayload = (payload: any): { nodes: Node[]; edges: Edge[] } => {
@@ -251,17 +417,23 @@ export default function WorkspacePage() {
   const edgesCountRef = useRef(initialEdges.length);
   const [libraryItems, setLibraryItems] = useState<any[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [iconSearch, setIconSearch] = useState('');
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const primitiveSections = useMemo(() => {
-    const grouped = componentList.reduce<Record<string, PrimitiveItem[]>>((acc, item) => {
-      if (!acc[item.section]) acc[item.section] = [];
-      acc[item.section].push(item);
-      return acc;
-    }, {});
-    return Object.entries(grouped);
-  }, []);
+  const filteredLibrary = useMemo(
+    () => COMPONENT_LIBRARY
+      .map((category) => ({
+        ...category,
+        items: category.items.filter((item) =>
+          item.name.toLowerCase().includes(iconSearch.toLowerCase()),
+        ),
+      }))
+      .filter((category) => category.items.length > 0),
+    [iconSearch],
+  );
 
   useEffect(() => {
     nodesCountRef.current = nodes.length;
@@ -462,6 +634,82 @@ export default function WorkspacePage() {
     return () => clearInterval(interval);
   }, [simulationComplete, snapshots]);
 
+  const duplicateNode = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => String(n.id) === String(nodeId));
+    if (!node) return;
+
+    const newNode: Node = {
+      ...node,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      selected: false,
+      position: { x: node.position.x + 40, y: node.position.y + 40 },
+      data: { ...(node.data || {}) },
+    };
+
+    setNodes((nds) => [...nds, newNode]);
+    setContextMenu(null);
+  }, [nodes, setNodes]);
+
+  const deleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => String(n.id) !== String(nodeId)));
+    setEdges((eds) => eds.filter((e) => String(e.source) !== String(nodeId) && String(e.target) !== String(nodeId)));
+    setContextMenu(null);
+  }, [setNodes, setEdges]);
+
+  const handleSelectAll = useCallback(() => {
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
+    setContextMenu(null);
+  }, [setNodes]);
+
+  const handleClearCanvas = useCallback(() => {
+    setNodes([]);
+    setEdges([]);
+    setContextMenu(null);
+  }, [setNodes, setEdges]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const active = document.activeElement?.tagName;
+      if (active === 'INPUT' || active === 'TEXTAREA') return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const selectedIds = nodes.filter((n) => n.selected).map((n) => String(n.id));
+        if (selectedIds.length === 0) return;
+
+        setNodes((nds) => nds.filter((n) => !selectedIds.includes(String(n.id))));
+        setEdges((eds) => eds.filter((edge) => !selectedIds.includes(String(edge.source)) && !selectedIds.includes(String(edge.target))));
+      }
+
+      if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        const selected = nodes.filter((n) => n.selected);
+        if (selected.length === 0) return;
+
+        const duplicates: Node[] = selected.map((n) => ({
+          ...n,
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          position: { x: n.position.x + 40, y: n.position.y + 40 },
+          selected: false,
+          data: { ...(n.data || {}) },
+        }));
+        setNodes((nds) => [...nds, ...duplicates]);
+      }
+
+      if (e.key.toLowerCase() === 'a' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setNodes((nds) => nds.map((n) => ({ ...n, selected: true })));
+      }
+
+      if (e.key === 'Escape') {
+        setNodes((nds) => nds.map((n) => ({ ...n, selected: false })));
+        setContextMenu(null);
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [nodes, setNodes, setEdges]);
+
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) =>
@@ -498,6 +746,21 @@ export default function WorkspacePage() {
     setSelectedNode(node);
   }, []);
 
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      nodeId: String(node.id),
+    });
+  }, []);
+
+  const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }, []);
+
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -507,19 +770,34 @@ export default function WorkspacePage() {
     (e: React.DragEvent) => {
       e.preventDefault();
       if (!rfInstance) return;
-      const type          = e.dataTransfer.getData('application/reactflow');
-      const componentData = JSON.parse(e.dataTransfer.getData('application/json'));
-      if (!type) return;
+      const type = e.dataTransfer.getData('application/reactflow') || 'custom';
+      const rawPayload = e.dataTransfer.getData('application/json');
+      if (!rawPayload) return;
+
+      let componentData: { name?: string; type?: string; icon?: string; iconPath?: string };
+      try {
+        componentData = JSON.parse(rawPayload);
+      } catch {
+        return;
+      }
+
       const position = rfInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+
+      const nodeType = componentData.type === 'group' ? 'group' : type;
+      const resolvedLabel = componentData.name || 'Service';
+      const resolvedKind = componentData.type || 'Node Service';
+      const resolvedIcon = normalizeIconPath(componentData.icon || componentData.iconPath || iconForNode(resolvedLabel, resolvedKind));
+
       setNodes((nds) =>
         nds.concat({
           id: `${Date.now()}`,
-          type: 'custom',
+          type: nodeType,
           position,
+          ...(nodeType === 'group' ? { style: { width: 300, height: 200 } } : {}),
           data: {
-            label: componentData.name,
-            type: componentData.type,
-            iconPath: componentData.iconPath || iconForNode(componentData.name, componentData.type),
+            label: resolvedLabel,
+            type: resolvedKind,
+            iconPath: resolvedIcon,
             isActive: false,
           },
         }),
@@ -528,11 +806,23 @@ export default function WorkspacePage() {
     [rfInstance, setNodes],
   );
 
-  const onDragStart = (e: React.DragEvent, component: PrimitiveItem) => {
+  const onDragStart = (e: React.DragEvent, component: LibraryItem) => {
     e.dataTransfer.setData('application/reactflow', 'custom');
-    e.dataTransfer.setData('application/json', JSON.stringify(component));
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      name: component.name,
+      type: component.type,
+      iconPath: normalizeIconPath(component.iconPath),
+    }));
     e.dataTransfer.effectAllowed = 'move';
   };
+
+  const handleNodeLabelChange = useCallback((nodeId: string, label: string) => {
+    setNodes((nds) => nds.map((node) => (
+      String(node.id) === String(nodeId)
+        ? { ...node, data: { ...(node.data || {}), label } }
+        : node
+    )));
+  }, [setNodes]);
 
   const handleGenerate = async () => {
     if (!getUser()) {
@@ -738,7 +1028,8 @@ export default function WorkspacePage() {
 
   const handleImportDiagram = (importedNodes: any[], importedEdges: any[]) => {
     const importedGraph = sanitizeGraph(importedNodes, importedEdges);
-    setNodes(importedGraph.nodes.map((node) => ({
+    const separatedNodes = resolveNodeOverlaps(importedGraph.nodes);
+    setNodes(separatedNodes.map((node) => ({
       ...node,
       data: { ...node.data, isActive: false },
     })));
@@ -880,32 +1171,18 @@ export default function WorkspacePage() {
   };
 
   return (
-    <div className="h-screen flex flex-col relative overflow-hidden" style={{ backgroundColor: '#000000', fontFamily: 'Inter, sans-serif' }}>
-      
-      {/* ── Background Atmosphere ── */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-40">
-        <img src="/night-hero.png" alt="Atmosphere" className="absolute inset-0 object-cover w-full h-full mix-blend-screen" />
-      </div>
-
-      {/* Grid overlay */}
-      <div
-        className="fixed inset-0 pointer-events-none z-[1]"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(to right, rgba(59,130,246,0.06) 0px, rgba(59,130,246,0.06) 1px, transparent 1px, transparent 80px), repeating-linear-gradient(to bottom, rgba(59,130,246,0.06) 0px, rgba(59,130,246,0.06) 1px, transparent 1px, transparent 80px)',
-          backgroundSize: '80px 80px',
-        }}
-      />
+    <div className="h-screen flex flex-col relative overflow-hidden" style={{ backgroundColor: '#0a0a0f', fontFamily: 'Inter, sans-serif' }}>
 
       {/* ── HEADER ── */}
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="border-b relative z-20 backdrop-blur-md bg-black/40 border-white/5"
-        style={{ height: '70px' }}
+        style={{ height: '52px' }}
       >
-        <div className="h-full px-10 flex items-center justify-between">
+        <div className="h-full px-5 flex items-center">
           {/* Left: Project Branding */}
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-3 shrink-0">
             <div 
               className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 border border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.15)]"
               onClick={() => window.location.href = '/dashboard'}
@@ -939,12 +1216,13 @@ export default function WorkspacePage() {
           </div>
 
           {/* Center: Mode Switch (Glassmorphism) */}
+          <div className="flex-1 flex justify-center">
           <div className="p-1 bg-zinc-900/60 rounded-2xl border border-white/5 flex gap-1 shadow-2xl">
             {(['edit', 'sim'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
-                className={`px-8 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-widest ${
+                className={`px-5 py-1.5 rounded-xl text-[10px] font-bold transition-all uppercase tracking-widest ${
                   mode === m ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'text-zinc-500 hover:text-white'
                 }`}
               >
@@ -952,16 +1230,23 @@ export default function WorkspacePage() {
               </button>
             ))}
           </div>
+          </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleShareClick}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-xs hover:bg-white/10 transition-all"
-            >
-              {linkCopied ? <Check size={14} className="text-blue-400" /> : <Share2 size={14} />}
-              <span className="tracking-widest uppercase">{linkCopied ? 'STABLE' : 'SHARE'}</span>
-            </button>
+          <div className="flex items-center gap-2 ml-auto">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleShareClick}
+                  className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/10 transition-all"
+                >
+                  {linkCopied ? <Check size={14} className="text-blue-400" /> : <Share2 size={14} />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
+                {linkCopied ? 'Link copied' : 'Share'}
+              </TooltipContent>
+            </Tooltip>
 
             <div className="flex items-center gap-1">
               {Array.from(peerCursors.entries()).map(([clientId, peer]) => (
@@ -980,27 +1265,30 @@ export default function WorkspacePage() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={handleDeployTest}
-              className="iz-btn-blue relative overflow-hidden py-2.5 px-8 rounded-xl text-white font-bold text-xs shadow-xl transition-all"
+              className="iz-btn-blue relative overflow-hidden py-2 px-5 rounded-xl text-white font-bold text-xs shadow-xl transition-all"
             >
-              <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
-              <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-              <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
-              <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
               DEPLOY & TEST
             </motion.button>
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                setGhostPanelOpen(true);
-                void runGhostTrace();
-              }}
-              className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-amber-100 shadow-xl transition-all hover:bg-amber-500/15"
-            >
-              <Ghost size={14} />
-              GhostTrace
-            </motion.button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => {
+                    setGhostPanelOpen(true);
+                    void runGhostTrace();
+                  }}
+                  className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-amber-100 shadow-xl transition-all hover:bg-amber-500/15"
+                >
+                  <Ghost size={14} />
+                  GhostTrace
+                </motion.button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
+                GhostTrace Analysis
+              </TooltipContent>
+            </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1010,27 +1298,32 @@ export default function WorkspacePage() {
                     whileTap={{ scale: ghostTraceResult ? 0.98 : 1 }}
                     onClick={() => setImportModalOpen(true)}
                     disabled={!ghostTraceResult}
-                    className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-2.5 text-xs font-bold uppercase tracking-widest text-red-100 shadow-xl transition-all hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
+                    className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-red-100 shadow-xl transition-all hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <ShieldAlert size={14} />
                     BreachRoom
                   </motion.button>
                 </span>
               </TooltipTrigger>
-              {!ghostTraceResult && (
-                <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
-                  Run GhostTrace first
-                </TooltipContent>
-              )}
+              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
+                {!ghostTraceResult ? 'Run GhostTrace first' : 'BreachRoom'}
+              </TooltipContent>
             </Tooltip>
 
-            <button
-              onClick={() => setSimulationMode((prev) => (prev === 'deterministic' ? 'randomized' : 'deterministic'))}
-              className="px-4 py-2 rounded-xl border border-white/10 text-white/80 hover:text-white hover:bg-white/5 transition-all text-[10px] font-bold tracking-widest uppercase"
-              title="Toggle simulation mode"
-            >
-              {simulationMode === 'deterministic' ? 'Deterministic' : 'Randomized'}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setSimulationMode((prev) => (prev === 'deterministic' ? 'randomized' : 'deterministic'))}
+                  className="h-9 flex items-center gap-2 rounded-full border border-white/10 px-3 text-white/80 hover:text-white hover:bg-white/5 transition-all text-[10px] font-bold uppercase tracking-wide"
+                >
+                  <Shuffle size={14} />
+                  {simulationMode === 'deterministic' ? 'Deterministic' : 'Randomized'}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
+                {simulationMode === 'deterministic' ? 'Deterministic mode' : 'Randomized mode'}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </motion.header>
@@ -1042,11 +1335,11 @@ export default function WorkspacePage() {
         <AnimatePresence>
           {isSidebarOpen && (
             <motion.aside
-              initial={{ x: -320, opacity: 0 }}
+              initial={{ x: -280, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
-              exit={{ x: -320, opacity: 0 }}
+              exit={{ x: -280, opacity: 0 }}
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="w-[320px] border-r border-white/5 bg-zinc-950/40 backdrop-blur-3xl flex flex-col relative z-20"
+              className="w-[280px] border-r border-white/5 bg-zinc-950/40 backdrop-blur-3xl flex flex-col relative z-20"
             >
               <div className="flex border-b border-white/5">
                 {(['ai', 'components'] as const).map((tab) => (
@@ -1057,7 +1350,7 @@ export default function WorkspacePage() {
                       activeTab === tab ? 'text-blue-500' : 'text-zinc-600 hover:text-zinc-400'
                     }`}
                   >
-                    {tab === 'ai' ? 'Vision Prompt' : 'Primitives'}
+                    {tab === 'ai' ? 'AI Generate' : 'Shapes'}
                     {activeTab === tab && (
                       <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
                     )}
@@ -1065,7 +1358,7 @@ export default function WorkspacePage() {
                 ))}
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                 {activeTab === 'ai' ? (
                   <div className="space-y-6">
                     <div className="relative">
@@ -1121,34 +1414,70 @@ export default function WorkspacePage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-5">
-                    {primitiveSections.map(([section, items]) => (
-                      <div key={section}>
-                        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500">{section}</div>
-                        <div className="grid grid-cols-1 gap-3">
-                          {items.map((component) => (
-                            <motion.div
-                              key={component.id}
-                              whileHover={{ x: 4, scale: 1.02 }}
-                              className="flex items-center gap-3 p-4 rounded-2xl bg-white/[0.03] border border-white/5 cursor-grab active:cursor-grabbing hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
-                              draggable
-                              onDragStartCapture={(e) => onDragStart(e, component)}
-                            >
-                              <img
-                                src={component.iconPath}
-                                alt={component.name}
-                                className="h-7 w-7 rounded object-contain bg-black/30 p-1"
-                                loading="lazy"
-                              />
-                              <div>
-                                <div className="text-zinc-200 font-bold text-sm mb-1">{component.name}</div>
-                                <div className="text-zinc-600 text-[10px] uppercase font-bold tracking-widest">{component.type}</div>
-                              </div>
-                            </motion.div>
-                          ))}
+                  <div className="space-y-4">
+                    <input
+                      value={iconSearch}
+                      onChange={(e) => setIconSearch(e.target.value)}
+                      placeholder="Search components..."
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm outline-none focus:border-blue-500/50 mb-1"
+                    />
+
+                    {filteredLibrary.map((category) => {
+                      const isCollapsed = collapsedCategories[category.category] ?? true;
+                      const visibleItems = category.items.slice(0, ICON_RENDER_LIMIT_PER_CATEGORY);
+                      const hiddenCount = Math.max(0, category.items.length - visibleItems.length);
+                      return (
+                        <div key={category.category} className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
+                          <button
+                            onClick={() => setCollapsedCategories((prev) => ({
+                              ...prev,
+                              [category.category]: !isCollapsed,
+                            }))}
+                            className="w-full flex items-center justify-between px-4 py-3 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-400 hover:text-white hover:bg-white/[0.03]"
+                          >
+                            <span>{category.category}</span>
+                            {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                          </button>
+
+                          {!isCollapsed && (
+                            <div className="p-3 grid grid-cols-2 gap-2">
+                              {visibleItems.map((item) => (
+                                <motion.div
+                                  key={item.id}
+                                  whileHover={{ scale: 1.05 }}
+                                  className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-black/30 border border-white/5 cursor-grab active:cursor-grabbing hover:bg-white/[0.06] hover:border-blue-500/30 transition-all"
+                                  draggable
+                                  onDragStartCapture={(e) => onDragStart(e, item)}
+                                >
+                                  <div className="w-9 h-9 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
+                                    <img
+                                      src={normalizeIconPath(item.iconPath)}
+                                      alt={item.name}
+                                      className="w-8 h-8 object-contain"
+                                      loading="lazy"
+                                      onError={(event) => {
+                                        const current = event.currentTarget;
+                                        if (current.src.endsWith(DEFAULT_ARCHITECTURE_ICON)) {
+                                          current.style.display = 'none';
+                                          return;
+                                        }
+                                        current.src = DEFAULT_ARCHITECTURE_ICON;
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="text-zinc-200 font-semibold text-[11px] text-center leading-tight line-clamp-2">{item.name}</div>
+                                </motion.div>
+                              ))}
+                              {hiddenCount > 0 && (
+                                <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-zinc-500">
+                                  Showing first {ICON_RENDER_LIMIT_PER_CATEGORY} items. Refine search to narrow {hiddenCount} more.
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1167,7 +1496,7 @@ export default function WorkspacePage() {
           {/* Toggle Sidebar Button */}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="absolute top-6 left-6 z-30 p-3 rounded-2xl bg-zinc-900/80 border border-white/10 text-white hover:bg-zinc-800 transition-all shadow-2xl"
+            className="absolute top-6 left-0 z-30 p-3 rounded-r-2xl bg-zinc-900/80 border border-white/10 border-l-0 text-white hover:bg-zinc-800 transition-all shadow-2xl"
           >
             {isSidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
           </button>
@@ -1182,6 +1511,9 @@ export default function WorkspacePage() {
             onInit={setRfInstance}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            onNodeContextMenu={onNodeContextMenu}
+            onPaneContextMenu={onPaneContextMenu}
+            onNodeLabelChange={handleNodeLabelChange}
             killedNodes={killedNodes}
             degradedNodes={degradedNodes}
             simulationSnapshots={snapshots}
@@ -1189,6 +1521,46 @@ export default function WorkspacePage() {
             isSimulating={isSimulating}
             ghostTraceRisks={ghostTraceRisks}
           />
+
+          {contextMenu && (
+            <div
+              className="fixed z-50 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[160px]"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              onMouseLeave={() => setContextMenu(null)}
+            >
+              {contextMenu.nodeId ? (
+                <>
+                  <button
+                    onClick={() => duplicateNode(contextMenu.nodeId!)}
+                    className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    onClick={() => deleteNode(contextMenu.nodeId!)}
+                    className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                  >
+                    Delete
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={handleSelectAll}
+                    className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    onClick={handleClearCanvas}
+                    className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                  >
+                    Clear canvas
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <AnimatePresence>
             {ghostPanelOpen && (
@@ -1219,11 +1591,6 @@ export default function WorkspacePage() {
             totalTicks={Math.max((incidentTimeline?.events.length ?? 1) - 1, 0)}
           />
 
-          {/* Canvas Labels / Overlays */}
-          <div className="absolute bottom-8 left-8 z-30 pointer-events-none opacity-40 select-none">
-             <div className="text-white font-mono text-[10px] font-bold tracking-[0.5em] uppercase mb-1">Canvas Replicated State</div>
-             <div className="text-zinc-500 font-mono text-[8px] tracking-[0.2em] uppercase">Stable Snapshot_ v1.02.3 // Sector 7</div>
-          </div>
         </div>
 
         {/* Right Inspector: Node Config (Glassmorphism) */}
@@ -1234,53 +1601,53 @@ export default function WorkspacePage() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 340, opacity: 0 }}
               transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              className="w-[340px] border-l border-white/5 bg-zinc-950/40 backdrop-blur-3xl p-8 overflow-y-auto z-20 custom-scrollbar"
+              className="w-[300px] border-l border-white/5 bg-zinc-950/40 backdrop-blur-3xl p-5 overflow-y-auto z-20 custom-scrollbar"
             >
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-5">
                  <div className="text-blue-500 text-[10px] font-bold uppercase tracking-[0.2em]">Node Inspector</div>
                  <button onClick={() => setSelectedNode(null)} className="text-zinc-600 hover:text-white transition-colors">
                     <X size={20} />
                  </button>
               </div>
 
-              <div className="mb-10">
+              <div className="mb-6">
                  <h3 className="text-white text-xl font-bold tracking-tight mb-2">{(selectedNode.data as { label?: string }).label ?? 'Untitled Node'}</h3>
                  <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">{(selectedNode.data as { type?: string }).type ?? 'Unknown'}</p>
               </div>
 
-              <div className="space-y-8">
+              <div className="space-y-5">
                  {/* Runtime Params */}
-                 <div className="space-y-4">
-                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Runtime Vectors</div>
+                  <div className="space-y-4">
+                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">Runtime Vectors</div>
                     {(['processingPower', 'coldStartLatency', 'failureRate'].map((field) => (
                        <div key={field} className="space-y-2">
                           <label className="text-[11px] text-zinc-500 font-medium px-1">{field}</label>
                           <input
                             type="text"
                             defaultValue={field === 'failureRate' ? '0.01%' : '200ms'}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
+                            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
                           />
                        </div>
                     )))}
                  </div>
 
                  {/* Network Params */}
-                 <div className="space-y-4">
-                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">Network Latency</div>
+                  <div className="space-y-4">
+                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">Network Latency</div>
                     {(['latency', 'jitter', 'bandwidthLimit'].map((field) => (
                        <div key={field} className="space-y-2">
                           <label className="text-[11px] text-zinc-500 font-medium px-1">{field}</label>
                           <input
                             type="text"
                             defaultValue={field === 'bandwidthLimit' ? '1Gbps' : '20ms'}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
+                            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
                           />
                        </div>
                     )))}
                  </div>
 
                  <div className="space-y-3 mt-6">
-                   <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">
+                   <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">
                      Chaos Controls
                    </div>
                    <button
@@ -1320,7 +1687,7 @@ export default function WorkspacePage() {
       >
         <button
           onClick={() => setTerminalExpanded(!terminalExpanded)}
-          className="h-12 flex items-center justify-between px-10 hover:bg-white/5 transition-colors group"
+          className="h-12 flex items-center justify-between px-5 hover:bg-white/5 transition-colors group"
         >
           <div className="flex items-center gap-3">
              <Terminal size={16} className="text-blue-500" />
