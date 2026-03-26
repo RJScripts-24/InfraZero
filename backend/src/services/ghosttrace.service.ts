@@ -493,7 +493,12 @@ export const predictAnomalyClass = (
 const callInferenceServer = async (
   nodes: CustomNode[],
   edges: CustomEdge[],
-): Promise<{ predictedClass: string; confidence: number; topologyEmbedding: number[] } | null> => {
+): Promise<{
+  predictedClass: string;
+  confidence: number;
+  classProbabilities?: Record<string, number>;
+  topologyEmbedding: number[];
+} | null> => {
   const inferenceUrl = process.env.INFERENCE_SERVER_URL || 'http://localhost:8001';
 
   try {
@@ -516,6 +521,7 @@ const callInferenceServer = async (
     return {
       predictedClass: data.predictedClass,
       confidence: data.confidence,
+      classProbabilities: data.classProbabilities,
       topologyEmbedding: data.topologyEmbedding,
     };
   } catch (err) {
@@ -545,13 +551,31 @@ export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTr
         : isRuleStable
           ? 'Latency Chain Degradation'
           : rulePrediction;
-  const overallRisk = clamp(
+  const heuristicRisk = clamp(
     Math.max(
       edgeRisks[0]?.riskScore ?? 0,
       nodeRisks[0]?.riskScore ?? 0,
       features.bottleneckScore,
     ),
   );
+  const unstableProbabilityFromMl = mlPrediction
+    ? clamp(
+      typeof mlPrediction.classProbabilities?.unstable === 'number'
+        ? mlPrediction.classProbabilities.unstable
+        : mlPrediction.predictedClass === 'unstable'
+          ? mlPrediction.confidence
+          : 1 - mlPrediction.confidence,
+    )
+    : null;
+  const overallRisk = unstableProbabilityFromMl === null
+    ? heuristicRisk
+    : clamp((unstableProbabilityFromMl * 0.7) + (heuristicRisk * 0.3));
+
+  if (unstableProbabilityFromMl !== null) {
+    logger.info(
+      `[GhostTrace] Risk composition: overall=${(overallRisk * 100).toFixed(1)}% (ml=${(unstableProbabilityFromMl * 100).toFixed(1)}%, heuristic=${(heuristicRisk * 100).toFixed(1)}%)`,
+    );
+  }
 
   const top3EdgeRisks = edgeRisks.slice(0, 3);
   const top3NodeRisks = nodeRisks.slice(0, 3);

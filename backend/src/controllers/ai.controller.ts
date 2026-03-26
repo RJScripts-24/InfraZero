@@ -140,17 +140,75 @@ RULES:
         const targetH = 700;
         const padX = 80;
         const padY = 60;
+        const minNodeGap = 80;
 
-        const normalizedCoordinates = rawNodes.map((n: any, idx: number) => {
-            const x = Math.max(0, Math.min(sourceW, toNum(n.x, 120 + idx * 140)));
-            const y = Math.max(0, Math.min(sourceH, toNum(n.y, 100 + idx * 90)));
+        const xs = rawNodes.map((n: any) => toNum(n?.x, NaN)).filter((v: number) => Number.isFinite(v));
+        const ys = rawNodes.map((n: any) => toNum(n?.y, NaN)).filter((v: number) => Number.isFinite(v));
+        const maxX = xs.length ? Math.max(...xs) : 0;
+        const maxY = ys.length ? Math.max(...ys) : 0;
+
+        const toImageSpace = (xRaw: number, yRaw: number): { x: number; y: number } => {
+            // Vision output may be absolute pixels, percentages, or normalized [0..1].
+            const looksNormalized = maxX <= 1.5 && maxY <= 1.5;
+            const looksPercentage = maxX <= 100 && maxY <= 100;
+
+            if (looksNormalized) {
+                return {
+                    x: Math.max(0, Math.min(sourceW, xRaw * sourceW)),
+                    y: Math.max(0, Math.min(sourceH, yRaw * sourceH)),
+                };
+            }
+
+            if (looksPercentage) {
+                return {
+                    x: Math.max(0, Math.min(sourceW, (xRaw / 100) * sourceW)),
+                    y: Math.max(0, Math.min(sourceH, (yRaw / 100) * sourceH)),
+                };
+            }
+
+            return {
+                x: Math.max(0, Math.min(sourceW, xRaw)),
+                y: Math.max(0, Math.min(sourceH, yRaw)),
+            };
+        };
+
+        const imageSpaceNodes = rawNodes.map((n: any, idx: number) => {
+            const fallbackX = 120 + idx * 140;
+            const fallbackY = 100 + idx * 90;
+            const imagePoint = toImageSpace(toNum(n?.x, fallbackX), toNum(n?.y, fallbackY));
 
             return {
                 ...n,
-                x: padX + (x / sourceW) * (targetW - padX * 2),
-                y: padY + (y / sourceH) * (targetH - padY * 2),
+                x: imagePoint.x,
+                y: imagePoint.y,
             };
         });
+
+        const minX = imageSpaceNodes.length ? Math.min(...imageSpaceNodes.map((n: any) => n.x)) : 0;
+        const maxNodeX = imageSpaceNodes.length ? Math.max(...imageSpaceNodes.map((n: any) => n.x)) : sourceW;
+        const minY = imageSpaceNodes.length ? Math.min(...imageSpaceNodes.map((n: any) => n.y)) : 0;
+        const maxNodeY = imageSpaceNodes.length ? Math.max(...imageSpaceNodes.map((n: any) => n.y)) : sourceH;
+        const bboxW = Math.max(1, maxNodeX - minX);
+        const bboxH = Math.max(1, maxNodeY - minY);
+        const availableW = Math.max(1, targetW - padX * 2);
+        const availableH = Math.max(1, targetH - padY * 2);
+
+        // Uniform scaling preserves relative spacing from the source image.
+        const fitScale = Math.min(availableW / bboxW, availableH / bboxH);
+        const idealScaleFromGap = imageSpaceNodes.length > 1
+            ? Math.min(2.4, Math.max(1, minNodeGap / Math.max(1, Math.min(bboxW, bboxH) / Math.sqrt(imageSpaceNodes.length))))
+            : 1;
+        const scale = Math.min(fitScale, fitScale * idealScaleFromGap);
+        const scaledW = bboxW * scale;
+        const scaledH = bboxH * scale;
+        const offsetX = padX + (availableW - scaledW) / 2;
+        const offsetY = padY + (availableH - scaledH) / 2;
+
+        const normalizedCoordinates = imageSpaceNodes.map((n: any) => ({
+            ...n,
+            x: offsetX + (n.x - minX) * scale,
+            y: offsetY + (n.y - minY) * scale,
+        }));
 
         // Ensure nodes have required React Flow fields
         const nodes = normalizedCoordinates.map((n: any) => ({
