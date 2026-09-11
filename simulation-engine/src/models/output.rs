@@ -44,6 +44,28 @@ pub struct TickSnapshot {
     pub chaos_effects_this_tick: Vec<ChaosEffect>,
 }
 
+/// The component that runs out of headroom first, and when.
+///
+/// An aggregate p99 says a system is slow; it does not say what to fix. This
+/// names the node that saturated earliest in the run, so a report can say "your
+/// database saturates first at your stated peak" instead of quoting a number
+/// about nothing in particular.
+///
+/// `None` when nothing saturated -- which is itself worth reporting, because it
+/// means the offered load never found a bottleneck.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaturationPoint {
+    pub node_id: String,
+    pub node_type: Option<String>,
+    /// The first tick at which this node reported itself overloaded.
+    pub first_overloaded_tick: u64,
+    /// Queue depth at that tick -- how much work had already piled up.
+    pub queue_depth_at_saturation: u32,
+    /// Share of the run this node spent overloaded, 0-1.
+    pub fraction_of_run_overloaded: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SimulationOutput {
@@ -54,6 +76,16 @@ pub struct SimulationOutput {
     pub total_requests: u64,
     pub total_failures: u64,
     pub overall_error_rate: f64,
+    /// Requests issued, counted once per request rather than per node visit.
+    pub requests_issued: u64,
+    /// Requests that failed somewhere along their path.
+    pub requests_failed: u64,
+    /// requests_failed / requests_issued.
+    ///
+    /// Prefer this over `overall_error_rate` for anything that compares
+    /// architectures. That field sums per-node tallies, so it is divided by the
+    /// number of hops a request makes and systematically flatters long chains.
+    pub request_error_rate: f64,
     pub avg_p99_latency_ms: f64,
     pub snapshots: Vec<TickSnapshot>,
     pub chaos_effects: Vec<ChaosEffect>,
@@ -61,6 +93,8 @@ pub struct SimulationOutput {
     pub grade: GradeResult,
     pub cost: CostEstimate,
     pub root_cause: RootCauseReport,
+    /// Which component ran out of headroom first. See `SaturationPoint`.
+    pub saturating_component: Option<SaturationPoint>,
     pub telemetry: Vec<TelemetryRow>,
 }
 

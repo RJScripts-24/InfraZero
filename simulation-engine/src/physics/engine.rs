@@ -49,6 +49,15 @@ const SNAPSHOT_INTERVAL: u64 = 10;
 const CRASH_ERROR_RATE_THRESHOLD: f64 = 0.85;
 const CRASH_CONSECUTIVE_TICKS: u64 = 15;
 
+/// Share of reads a cache serves without touching what sits behind it.
+///
+/// A single global figure is a simplification -- real hit ratios depend on
+/// working-set size and eviction policy, neither of which a topology diagram
+/// states. It is set deliberately below the 90-99% a well-tuned production
+/// cache achieves, so the grader credits caching for shielding a backend
+/// without treating a cache as a free pass.
+const CACHE_HIT_RATIO: f64 = 0.75;
+
 // =============================================================================
 // Simulation Status
 // =============================================================================
@@ -78,6 +87,18 @@ struct LiveNodeState {
     pub active_connections: u32,
     /// Queue of waiting requests (overflow when at capacity).
     pub queue_depth: u32,
+    /// Requests still waiting to be served, CARRIED ACROSS TICKS.
+    ///
+    /// This is what makes saturation possible. Previously the only queue state
+    /// was `active_connections`, which was incremented and decremented inside a
+    /// single call, so every arriving request found the node empty however much
+    /// traffic was offered -- a 128x increase in load moved p99 by 5ms and no
+    /// node ever reached its capacity. Backlog persists between ticks, so when
+    /// arrivals outrun service the queue grows, latency grows with it, and the
+    /// node eventually sheds load.
+    pub backlog: f64,
+    /// Requests that arrived during the current tick, before draining.
+    pub arrivals_this_tick: u32,
     /// Total requests received this tick.
     pub requests_received: u64,
     /// Total requests successfully processed this tick.
@@ -178,6 +199,10 @@ pub struct SimulationEngine {
     crash_tick: Option<u64>,
     /// All request packets processed (for root cause analysis).
     all_packets: Vec<RequestPacket>,
+    /// Requests issued, counted once per request rather than per node visit.
+    packets_issued: u64,
+    /// Requests that failed somewhere along their path.
+    packets_failed: u64,
 }
 
 /// Configuration knobs for a simulation run.
@@ -295,6 +320,8 @@ impl SimulationEngine {
             all_chaos_effects: Vec::new(),
             crash_tick: None,
             all_packets: Vec::new(),
+            packets_issued: 0,
+            packets_failed: 0,
         })
     }
 
@@ -337,6 +364,9 @@ impl SimulationEngine {
                 self.process_packet(packet, tick);
             }
 
+            // ── 4b. Drain each node's queue by one tick of capacity ──────────
+            self.settle_tick_state();
+
             // ── 5. Check crash condition ─────────────────────────────────────
             self.record_tick_telemetry(tick, logger);
 
@@ -374,14 +404,102 @@ impl SimulationEngine {
             state.requests_received = 0;
             state.requests_succeeded = 0;
             state.requests_failed = 0;
+            state.arrivals_this_tick = 0;
             state.latency_samples.clear();
             state.is_overloaded = false;
+            // `backlog` is deliberately NOT cleared. It is the only state that
+            // carries load from one tick into the next, and therefore the only
+            // reason an overloaded node behaves differently from an idle one.
         }
         for state in self.edge_live.values_mut() {
             state.packets_in_flight = 0;
             state.packets_delivered = 0;
             state.packets_dropped = 0;
             state.effective_latency_ms = 0.0;
+        }
+    }
+
+    /// How many requests a node can finish in one tick.
+    ///
+    /// Derived from `processing_power` and the component's kind. The kind
+    /// matters because throughput differs by orders of magnitude between tiers
+    /// that a topology-only grader must be able to tell apart: an in-memory
+    /// cache serves far more requests per second than a database doing durable
+    /// writes, and a load balancer is mostly just forwarding bytes.
+    ///
+    /// Without this, "put a cache in front of the database" changes nothing in
+    /// simulation, and the engine cannot express the single most common piece
+    /// of architectural advice there is.
+    fn capacity_per_tick(node: &Node, throughput_multiplier: f64) -> f64 {
+        let kind_capacity = match node.node_type.as_deref() {
+            Some("cache") => 40.0,
+            Some("load_balancer") => 30.0,
+            Some("edge") => 30.0,
+            Some("api_gateway") => 18.0,
+            Some("queue") => 25.0,
+            Some("database") => 5.0,
+            _ => 10.0, // compute / api / anything unrecognised
+        };
+        let replicas = Self::replica_count(node) as f64;
+        (kind_capacity * replicas * node.processing_power.max(0.05)
+            * throughput_multiplier.max(0.01))
+            .max(0.05)
+    }
+
+    /// Instances behind one box on the diagram. At least one.
+    fn replica_count(node: &Node) -> u32 {
+        node.replicas.unwrap_or(1).max(1)
+    }
+
+    /// Whether losing this component takes the whole tier with it.
+    ///
+    /// A single-instance component dies outright. A replicated one loses one
+    /// instance: the tier keeps serving at reduced capacity, which is the whole
+    /// point of running more than one. Treating every killed box as a total
+    /// outage is what made a serial chain of drawn-once tiers look more fragile
+    /// than a wide fan-out of parallel services.
+    fn kill_is_total(&self, node: &Node) -> bool {
+        self.chaos.is_node_down(&node.id) && Self::replica_count(node) <= 1
+    }
+
+    /// Capacity still available at a component one of whose replicas is down.
+    fn surviving_replica_fraction(&self, node: &Node) -> f64 {
+        if !self.chaos.is_node_down(&node.id) {
+            return 1.0;
+        }
+        let replicas = Self::replica_count(node);
+        if replicas <= 1 {
+            return 0.0;
+        }
+        (replicas - 1) as f64 / replicas as f64
+    }
+
+    /// Drain each node's queue by one tick's worth of service capacity.
+    ///
+    /// Runs after every packet for the tick has arrived. Below capacity the
+    /// backlog stays at zero and latency is just service time; above it the
+    /// backlog grows every tick, which is what produces a saturation knee
+    /// rather than a flat latency curve.
+    fn settle_tick_state(&mut self) {
+        for node in &self.nodes {
+            let throughput_multiplier = self.chaos.node_throughput_multiplier(&node.id)
+                * self.surviving_replica_fraction(node);
+            let capacity = Self::capacity_per_tick(node, throughput_multiplier);
+            let queue_cap = node.queue_capacity.max(1) as f64;
+
+            if let Some(state) = self.node_live.get_mut(&node.id) {
+                let pending = state.backlog + state.arrivals_this_tick as f64;
+                state.backlog = (pending - capacity).max(0.0);
+                // A queue cannot grow past the buffer that holds it; anything
+                // beyond that was already shed on arrival.
+                state.backlog = state.backlog.min(queue_cap);
+                state.queue_depth = state.backlog.round() as u32;
+                // Sustained backlog past half the buffer is the operational
+                // definition of an overloaded component.
+                if state.backlog > queue_cap * 0.5 {
+                    state.is_overloaded = true;
+                }
+            }
         }
     }
 
@@ -410,7 +528,13 @@ impl SimulationEngine {
 
         for (i, node_id) in path.iter().enumerate() {
             // ── Check if this node is down via chaos ──────────────────────────
-            if self.chaos.is_node_down(node_id) {
+            // A replicated tier survives losing one instance; only a
+            // single-instance component is taken out entirely.
+            let node_is_gone = match self.nodes.iter().find(|n| n.id == *node_id) {
+                Some(node) => self.kill_is_total(node),
+                None => self.chaos.is_node_down(node_id),
+            };
+            if node_is_gone {
                 failed = true;
                 failure_reason = Some(format!("Connection Refused: {} is down.", node_id));
                 log_error(&format!(
@@ -508,7 +632,8 @@ impl SimulationEngine {
                 None => continue,
             };
 
-            let throughput_mult = self.chaos.node_throughput_multiplier(node_id);
+            let throughput_mult = self.chaos.node_throughput_multiplier(node_id)
+                * self.surviving_replica_fraction(&node);
             let extra_latency = self.chaos.node_extra_latency(node_id);
 
             let (processing_latency_ms, node_failed) = self.simulate_node_processing(
@@ -547,6 +672,16 @@ impl SimulationEngine {
         }
 
         // ── Finalize packet ───────────────────────────────────────────────────
+        // Counted per REQUEST. The per-node tallies below cannot substitute:
+        // they are summed over every hop a request makes, so one failure in a
+        // ten-hop chain reads as a 10% error rate while the same failure in a
+        // two-hop path reads as 50%. That dilution made long synchronous chains
+        // look more reliable than short ones.
+        self.packets_issued += 1;
+        if failed {
+            self.packets_failed += 1;
+        }
+
         packet.status = if failed { RequestStatus::Failed } else { RequestStatus::Success };
         packet.total_latency_ms = total_latency_ms;
         packet.error = failure_reason;
@@ -568,40 +703,49 @@ impl SimulationEngine {
     ) -> (f64, bool) {
         // Effective processing power after chaos degradation.
         let effective_power = (node.processing_power * throughput_mult).max(0.001);
+        let capacity = Self::capacity_per_tick(node, throughput_mult);
+        let queue_cap = node.queue_capacity.max(1) as f64;
 
-        // Effective queue capacity.
-        let queue_cap = node.queue_capacity;
+        // Service time is a property of the component, independent of load.
+        let service_ms = node.cold_start_latency_ms + (50.0 / effective_power);
 
-        // Current live state.
+        // Draw the RNG before borrowing live state, so the borrow is short and
+        // the sequence stays identical regardless of which branch is taken.
+        let jitter = self.rng.next_gaussian(0.0, service_ms * 0.1);
+        let failure_roll = self.rng.next_f64();
+
         let live = match self.node_live.get_mut(&node.id) {
             Some(l) => l,
             None => return (0.0, false),
         };
 
-        // Retry storm artificially inflates queue pressure.
-        let virtual_connections = (live.active_connections as f64 * retry_multiplier) as u32;
+        // Where this request sits in line: everything still queued from
+        // previous ticks, plus everything that arrived earlier in this one. A
+        // retry storm multiplies the apparent pressure without adding real
+        // work, which is exactly how a retry storm behaves.
+        let position = (live.backlog + live.arrivals_this_tick as f64) * retry_multiplier;
 
-        // Check if queue is full.
-        if virtual_connections >= queue_cap {
-            return (0.0, true); // Refuse the request.
+        // The buffer is finite. Past it the node sheds load rather than
+        // queueing without bound -- this is the error-rate spike that follows
+        // the latency knee, and the thing that eventually trips crash
+        // detection.
+        if position >= queue_cap {
+            live.is_overloaded = true;
+            return (0.0, true);
         }
 
-        live.active_connections += 1;
+        live.arrivals_this_tick += 1;
+        live.active_connections = live.arrivals_this_tick;
 
-        // Base processing latency: inversely proportional to processing power.
-        // A node with processingPower=1.0 takes ~50ms; 0.5 power = ~100ms.
-        let base_latency_ms = node.cold_start_latency_ms + (50.0 / effective_power);
+        // Queueing delay: how long the requests already in front of this one
+        // take to clear at the node's service rate. This is the term that was
+        // missing, and the only one that responds to offered load.
+        let queueing_ms = (position / capacity.max(0.001)) * TICK_INTERVAL_MS;
 
-        // Add jitter from the RNG.
-        let jitter = self.rng.next_gaussian(0.0, base_latency_ms * 0.1);
-        let final_latency = (base_latency_ms + jitter + extra_latency_ms).max(0.1);
+        let final_latency = (service_ms + queueing_ms + jitter + extra_latency_ms).max(0.1);
 
-        // Simulate failure based on node's configured failure rate.
-        let node_failed = self.rng.next_f64() < node.failure_rate;
-
-        if live.active_connections > 0 {
-            live.active_connections -= 1;
-        }
+        // Intrinsic failure, independent of load.
+        let node_failed = failure_roll < node.failure_rate;
 
         (final_latency, node_failed)
     }
@@ -630,27 +774,97 @@ impl SimulationEngine {
 
     /// Resolve the request path through the graph from the ingress node.
     /// Uses a simple greedy DFS — in production this would use actual routing rules.
-    fn resolve_path(&self, ingress_id: &NodeId, _packet: &RequestPacket) -> Vec<NodeId> {
+    fn resolve_path(&mut self, ingress_id: &NodeId, _packet: &RequestPacket) -> Vec<NodeId> {
         let mut path = vec![ingress_id.clone()];
         let mut current = ingress_id.clone();
         let mut visited = std::collections::HashSet::new();
         visited.insert(current.clone());
 
-        // Walk outbound edges, picking the first unvisited target.
         loop {
-            let next = self
+            // A request served from cache does not travel any further. Without
+            // this, a cache is just another hop and adding one in front of a
+            // hot database changes nothing -- the database still sees every
+            // request, so the most common piece of architectural advice there
+            // is would be unmodellable.
+            //
+            // Whether a cache CAN serve the request depends on the call:
+            //   read  -- cacheable, the ordinary case
+            //   write -- never; it has to reach the store behind the cache
+            //   unset -- treated as cacheable, which is the behaviour that
+            //            existed before edges could state a kind at all
+            let inbound_call_kind = if path.len() > 1 {
+                let previous = &path[path.len() - 2];
+                self.edges
+                    .iter()
+                    .find(|e| e.target == current && e.source == *previous)
+                    .and_then(|e| e.call_kind.as_deref())
+            } else {
+                None
+            };
+
+            if let Some(node) = self.nodes.iter().find(|n| n.id == current) {
+                let is_cache = node.node_type.as_deref() == Some("cache");
+                let servable_from_cache = is_cache && inbound_call_kind != Some("write");
+                if servable_from_cache && self.rng.next_f64() < CACHE_HIT_RATIO {
+                    break;
+                }
+
+                match node.node_type.as_deref() {
+                    // Handing work to a queue completes the caller's request --
+                    // that is what "asynchronous" means, and it is the entire
+                    // reason for decoupling a write. Walking on through the
+                    // consumer would keep the caller waiting for the slowest
+                    // thing behind the queue, which is precisely the coupling
+                    // the queue was introduced to remove.
+                    //
+                    // Simplification worth stating: the consumer's own load is
+                    // then not driven by this path, so the engine models the
+                    // latency and availability benefit of decoupling but not
+                    // the backlog that builds up behind a queue whose consumer
+                    // is too slow.
+                    Some("queue") => break,
+                    _ => {}
+                }
+            }
+
+            // An asynchronous handoff completes the caller's request, so it does
+            // not extend the path. Dropping these from the candidate list --
+            // rather than only stopping when EVERY way onward is asynchronous --
+            // is what keeps a fire-and-forget dependency out of the synchronous
+            // path when the caller also has synchronous work to do. A service
+            // that writes metrics to a sink and reads from its database has one
+            // of each: under the previous rule the walk could pick the sink,
+            // which put telemetry in the user's request path competing for the
+            // same capacity, and saturated a metrics store at ordinary load.
+            //
+            // Same simplification the queue case states above: the sink's own
+            // load is then not driven by this path.
+            let candidates: Vec<NodeId> = self
                 .edges
                 .iter()
-                .find(|e| e.source == current && !visited.contains(&e.target));
+                .filter(|e| e.source == current && !visited.contains(&e.target))
+                .filter(|e| e.call_kind.as_deref() != Some("async"))
+                .map(|e| e.target.clone())
+                .collect();
 
-            match next {
-                Some(edge) => {
-                    current = edge.target.clone();
-                    visited.insert(current.clone());
-                    path.push(current.clone());
-                }
-                None => break,
+            // Nothing synchronous left to do: either a leaf, or every way
+            // onward was asynchronous.
+            if candidates.is_empty() {
+                break;
             }
+
+            // Choose uniformly among the outbound branches rather than always
+            // taking the first. Taking the first meant every packet followed an
+            // identical path, so in a twenty-way fan-out nineteen services
+            // received no traffic at all and the fan-out could not be told
+            // apart from a single chain. Selection uses the seeded RNG, so
+            // replay stays deterministic.
+            let choice = (self.rng.next_f64() * candidates.len() as f64) as usize;
+            let next = candidates[choice.min(candidates.len() - 1)].clone();
+
+            visited.insert(next.clone());
+            path.push(next.clone());
+            current = next;
         }
 
         path
@@ -809,6 +1023,12 @@ impl SimulationEngine {
             0.0
         };
 
+        let request_error_rate = if self.packets_issued > 0 {
+            self.packets_failed as f64 / self.packets_issued as f64
+        } else {
+            0.0
+        };
+
         // Compute average p99 latency across all nodes and snapshots.
         let latency_readings: Vec<f64> = self
             .snapshots
@@ -853,6 +1073,50 @@ impl SimulationEngine {
             grade_result.grade, overall_error_rate * 100.0, cost_result.estimated_monthly_usd
         ));
 
+        // ── Saturating component ──────────────────────────────────────────────
+        // Walked in tick order, so the FIRST node to report itself overloaded
+        // wins rather than the one that ends up worst. The earliest bottleneck
+        // is the one a user has to fix; everything downstream of it is a
+        // consequence, and reporting the loudest node instead would point at
+        // the symptom.
+        let mut saturating_component: Option<crate::models::output::SaturationPoint> = None;
+        let mut overloaded_ticks: std::collections::HashMap<String, u64> =
+            std::collections::HashMap::new();
+
+        for snapshot in self.snapshots.iter() {
+            for metric in snapshot.node_metrics.iter() {
+                if !metric.is_overloaded {
+                    continue;
+                }
+                *overloaded_ticks.entry(metric.node_id.clone()).or_insert(0) += 1;
+                if saturating_component.is_none() {
+                    let node_type = self
+                        .nodes
+                        .iter()
+                        .find(|n| n.id == metric.node_id)
+                        .and_then(|n| n.node_type.clone());
+                    saturating_component = Some(crate::models::output::SaturationPoint {
+                        node_id: metric.node_id.clone(),
+                        node_type,
+                        first_overloaded_tick: snapshot.tick,
+                        queue_depth_at_saturation: metric.queue_depth,
+                        fraction_of_run_overloaded: 0.0,
+                    });
+                }
+            }
+        }
+
+        let snapshot_count = self.snapshots.len().max(1) as f64;
+        if let Some(point) = saturating_component.as_mut() {
+            let ticks = *overloaded_ticks.get(&point.node_id).unwrap_or(&0) as f64;
+            point.fraction_of_run_overloaded = ticks / snapshot_count;
+            log_info(&format!(
+                "[Engine] First saturation: {} at tick {} ({:.0}% of run overloaded).",
+                point.node_id, point.first_overloaded_tick,
+                point.fraction_of_run_overloaded * 100.0
+            ));
+        }
+
         SimulationOutput {
             graph_hash: self.graph_hash,
             status,
@@ -861,6 +1125,9 @@ impl SimulationEngine {
             total_requests,
             total_failures,
             overall_error_rate,
+            requests_issued: self.packets_issued,
+            requests_failed: self.packets_failed,
+            request_error_rate,
             avg_p99_latency_ms,
             snapshots: self.snapshots,
             chaos_effects: self.all_chaos_effects,
@@ -868,6 +1135,7 @@ impl SimulationEngine {
             grade: grade_result,
             cost: cost_result,
             root_cause,
+            saturating_component,
             telemetry: Vec::new(),
         }
     }
@@ -982,6 +1250,7 @@ mod tests {
                 failure_rate: 0.0,
                 x: 0.0,
                 y: 0.0,
+                replicas: None,
                 provider_icon: Some("aws-alb".to_string()),
             },
             Node {
@@ -994,6 +1263,7 @@ mod tests {
                 failure_rate: 0.01,
                 x: 100.0,
                 y: 0.0,
+                replicas: None,
                 provider_icon: Some("aws-lambda".to_string()),
             },
             Node {
@@ -1006,6 +1276,7 @@ mod tests {
                 failure_rate: 0.005,
                 x: 200.0,
                 y: 0.0,
+                replicas: None,
                 provider_icon: Some("aws-dynamodb".to_string()),
             },
         ];
@@ -1019,6 +1290,7 @@ mod tests {
                 jitter_ms: 0.5,
                 packet_loss: 0.0,
                 bandwidth_limit_mbps: 1000.0,
+                call_kind: None,
             },
             Edge {
                 id: "api->db".to_string(),
@@ -1028,6 +1300,7 @@ mod tests {
                 jitter_ms: 1.0,
                 packet_loss: 0.001,
                 bandwidth_limit_mbps: 500.0,
+                call_kind: None,
             },
         ];
 
@@ -1064,6 +1337,67 @@ mod tests {
         assert_eq!(output.status, SimulationStatus::Completed);
         assert!(output.ticks_run > 0);
         assert!(output.total_requests > 0);
+    }
+
+    /// A fire-and-forget dependency must stay off the synchronous path even
+    /// when the caller also has synchronous work to do.
+    ///
+    /// The earlier rule only stopped the walk when EVERY way onward was
+    /// asynchronous, so a service with one async edge and one sync edge could
+    /// still route a user request into the async target. On an imported
+    /// repository that put a metrics store in the request path, where it
+    /// competed for the same capacity and shed load at ordinary traffic.
+    #[test]
+    fn test_async_edge_target_receives_no_synchronous_traffic() {
+        let mut input = make_simple_input();
+        input.nodes.push(Node {
+            id: "metrics".to_string(),
+            label: "Metrics Sink".to_string(),
+            node_type: Some("database".to_string()),
+            processing_power: 0.8,
+            cold_start_latency_ms: 5.0,
+            queue_capacity: 50,
+            failure_rate: 0.0,
+            x: 200.0,
+            y: 100.0,
+            replicas: None,
+            provider_icon: None,
+        });
+        // The API server both reads its database (synchronous) and writes
+        // telemetry (asynchronous).
+        input.edges.push(Edge {
+            id: "api->metrics".to_string(),
+            source: "api".to_string(),
+            target: "metrics".to_string(),
+            latency_ms: 5.0,
+            jitter_ms: 1.0,
+            packet_loss: 0.0,
+            bandwidth_limit_mbps: 500.0,
+            call_kind: Some("async".to_string()),
+        });
+
+        let seed = input.config.seed;
+        let engine = SimulationEngine::new(input).unwrap();
+        let mut logger = TelemetryLogger::new(seed);
+        let output = engine.run(&mut logger);
+
+        let received: u64 = output
+            .snapshots
+            .iter()
+            .flat_map(|snapshot| snapshot.node_metrics.iter())
+            .filter(|metric| metric.node_id == "metrics")
+            .map(|metric| metric.requests_received)
+            .sum();
+        assert_eq!(received, 0, "An async target must not serve synchronous requests.");
+
+        let db_received: u64 = output
+            .snapshots
+            .iter()
+            .flat_map(|snapshot| snapshot.node_metrics.iter())
+            .filter(|metric| metric.node_id == "db")
+            .map(|metric| metric.requests_received)
+            .sum();
+        assert!(db_received > 0, "The synchronous branch must still carry traffic.");
     }
 
     #[test]
@@ -1144,9 +1478,17 @@ mod tests {
         let output = engine.run(&mut logger);
 
         // May crash or complete depending on exact RNG, but error rate should be high.
+        //
+        // Asserted on `request_error_rate`, not `overall_error_rate`. The latter
+        // sums per-node tallies and is therefore divided by the number of hops a
+        // request makes, so a three-hop path dilutes one node failing 99% of the
+        // time down towards a third -- which is why this sat just under 0.5 and
+        // failed. `request_error_rate` counts each request once, which is what
+        // the assertion was always trying to say.
         assert!(
-            output.overall_error_rate > 0.5,
-            "99% failure rate should produce high system error rate."
+            output.request_error_rate > 0.5,
+            "99% failure rate should produce high request error rate, got {}",
+            output.request_error_rate
         );
     }
 
@@ -1178,7 +1520,7 @@ mod tests {
     #[test]
     fn test_path_resolution_walks_graph() {
         let input = make_simple_input();
-        let engine = SimulationEngine::new(input).unwrap();
+        let mut engine = SimulationEngine::new(input).unwrap();
         let dummy_packet = RequestPacket::default();
         let path = engine.resolve_path(&"lb".to_string(), &dummy_packet);
         assert_eq!(path, vec!["lb", "api", "db"]);

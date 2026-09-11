@@ -68,7 +68,16 @@ interface EngineRunOutput {
 export interface EngineRunResult {
   graphHash: string;
   universeSeed: string;
+  /**
+   * The engine's internal letter. NOT for display, and not the product's grade.
+   *
+   * The letter a user sees comes from the trained model, resolved in one place
+   * in `reportBuilder.service`. This one survives only because the engine
+   * derives its pass/fail status from it. Surfacing it again would put two
+   * disagreeing letters in front of a reader, which is what it used to do.
+   */
   grade: string;
+  /** Renamed to `simulatedResilienceScore` once it reaches the report. */
   gradeScore: number;
   gradeRationale: string[];
   status: string;
@@ -190,10 +199,50 @@ const normalizeNodes = (nodes: CustomNode[]): Array<Record<string, unknown>> => 
     coldStartLatencyMs: Math.max(0, node.data?.coldStartLatencyMs ?? DEFAULT_NODE_CONFIG.COLD_START_LATENCY_MS),
     queueCapacity: 100,
     failureRate: parsePercentToFraction(node.data?.failureRatePercent, DEFAULT_NODE_CONFIG.FAILURE_RATE_PERCENT),
+    // How many instances this box stands for. The engine multiplies capacity by
+    // it and, when a replicated component is killed, degrades the tier instead
+    // of removing it -- so a three-instance gateway survives losing one.
+    replicas: Math.max(1, Math.round(node.data?.replicas ?? 1)),
     x: Number(node.position?.x ?? 0),
     y: Number(node.position?.y ?? 0),
     providerIcon: null,
   }));
+};
+
+/**
+ * Load the simulation should be run at, in requests per second.
+ *
+ * Uses the peak the user stated on their entry points when they have stated
+ * one, and falls back to a house default otherwise. This is what makes the
+ * result mean anything: "saturates at 300 rps" is a number about the default,
+ * whereas "saturates below your stated 5,000 rps peak" is a statement about
+ * the user's system. Peaks on multiple entry points sum, because they all
+ * arrive at the same architecture.
+ *
+ * The default has to sit BELOW what one default-configured component can
+ * serve, or every graph fails for a reason that is about this constant rather
+ * than about the architecture. The engine gives a database-class node 5
+ * requests per 10ms tick, i.e. 500 rps, and a repo import states no peak of its
+ * own -- so at the previous default of 900 every imported architecture
+ * containing a single database saturated it by construction, reported permanent
+ * queue overflow from roughly tick 15 onward, and graded F. At 300 a plain
+ * service-and-database graph has headroom, and saturation once again means
+ * something about the topology: a database shared by many services, a tier with
+ * no replicas, a long synchronous chain.
+ */
+const DEFAULT_BASELINE_RPS = 300;
+
+const resolveBaselineRps = (nodes: CustomNode[]): number => {
+  const stated = nodes
+    .map((node) => Number(node.data?.expectedPeakRps ?? 0))
+    .filter((rps) => Number.isFinite(rps) && rps > 0);
+
+  if (stated.length === 0) {
+    return DEFAULT_BASELINE_RPS;
+  }
+  const total = stated.reduce((sum, rps) => sum + rps, 0);
+  // The engine caps out well before this; anything higher is a typo, not a plan.
+  return Math.min(Math.round(total), 5_000_000);
 };
 
 const normalizeEdges = (edges: CustomEdge[]): Array<Record<string, unknown>> => {
@@ -205,6 +254,12 @@ const normalizeEdges = (edges: CustomEdge[]): Array<Record<string, unknown>> => 
     jitterMs: Math.max(0, edge.jitterMs ?? DEFAULT_EDGE_CONFIG.JITTER_MS),
     packetLoss: parsePercentToFraction(edge.packetLossPercent, DEFAULT_EDGE_CONFIG.PACKET_LOSS_PERCENT),
     bandwidthLimitMbps: Math.max(1, edge.bandwidthLimitMbps ?? DEFAULT_EDGE_CONFIG.BANDWIDTH_LIMIT_MBPS),
+    // An asynchronous call completes for the caller at the handoff. Without
+    // this the engine walks the whole path synchronously, so decoupling a slow
+    // dependency behind a queue changes nothing and the most common resilience
+    // fix there is becomes unmodellable. Unstated means synchronous, which is
+    // the conservative reading.
+    callKind: edge.callKind ?? 'sync',
   }));
 };
 
@@ -224,7 +279,10 @@ const buildLatencyTimeline = (snapshots: EngineSnapshot[]): Array<{ time: number
     const p99Values = snapshot.nodeMetrics.map((node) => node.p99LatencyMs).filter((value) => value > 0);
     const average = p99Values.length > 0 ? p99Values.reduce((sum, value) => sum + value, 0) / p99Values.length : 0;
     return {
-      time: Math.round(snapshot.simTimeMs / 1000),
+      // Two decimals, not whole seconds: a 100-snapshot run spans ~10s, and
+      // rounding to integers collapsed every point onto 11 duplicate x values,
+      // which rendered as a repeating axis ("0 0 1 1 1 1 2 2 ...").
+      time: Number((snapshot.simTimeMs / 1000).toFixed(2)),
       latency: Math.round(average),
     };
   });
@@ -315,7 +373,7 @@ export const runSimulationWithEngine = (
       seed,
       total_ticks: 1000,
       traffic_pattern: 'steady',
-      baseline_rps: 900,
+      baseline_rps: resolveBaselineRps(orderedNodes),
       peak_rps_multiplier: 3,
       chaos_enabled: options?.chaosEnabled ?? false,
       chaos_events: normalizedChaosEvents,

@@ -3,6 +3,9 @@ import { CustomEdge, CustomNode } from '../types/graph';
 import {
   EdgeRiskScore,
   GhostTraceRequest,
+  ModelNodeRole,
+  ModelRecommendation,
+  TrainingCoverage,
   GhostTraceResult,
   GraphFeatures,
   NodeRiskScore,
@@ -311,9 +314,14 @@ export const computeEdgeRisks = (
     }
 
     if (targetNode) {
-      const redundantPeers = nodes.filter(
-        (node) => node.id !== targetNode.id && node.position.y === targetNode.position.y,
-      );
+      // `position` is optional on the graph type: a topology that arrived from the
+      // AI generator or an API caller has no coordinates, and dereferencing it
+      // threw, which aborted GhostTrace and silently stripped the entire model
+      // analysis out of the report.
+      const targetY = targetNode.position?.y;
+      const redundantPeers = typeof targetY === 'number'
+        ? nodes.filter((node) => node.id !== targetNode.id && node.position?.y === targetY)
+        : [];
       if (redundantPeers.length === 0) {
         riskScore += 0.15;
         reasons.push('No redundant path');
@@ -490,14 +498,47 @@ export const predictAnomalyClass = (
   return 'Stable - No Major Anomaly Predicted';
 };
 
+/**
+ * The grader returns one of three ordered risk classes. Collapsing them to a
+ * single [0,1] risk keeps the downstream scoring arithmetic unchanged: a
+ * "medium" grade contributes half the risk of a "high" one.
+ */
+const RISK_WEIGHT_BY_CLASS: Record<string, number> = {
+  low: 0,
+  medium: 0.5,
+  high: 1,
+};
+
+const expectedRiskFromGrade = (
+  predictedClass: string,
+  confidence: number,
+  classProbabilities?: Record<string, number>,
+): number => {
+  if (classProbabilities) {
+    const weighted = Object.entries(classProbabilities).reduce(
+      (total, [name, probability]) => total + (RISK_WEIGHT_BY_CLASS[name] ?? 0.5) * probability,
+      0,
+    );
+    return clamp(weighted);
+  }
+  // No distribution available: spread the leftover mass over the other classes.
+  const own = RISK_WEIGHT_BY_CLASS[predictedClass] ?? 0.5;
+  return clamp(own * confidence + 0.5 * (1 - confidence));
+};
+
 const callInferenceServer = async (
   nodes: CustomNode[],
   edges: CustomEdge[],
 ): Promise<{
   predictedClass: string;
+  grade: string;
   confidence: number;
   classProbabilities?: Record<string, number>;
   topologyEmbedding: number[];
+  nodeRoles: ModelNodeRole[];
+  recommendations: ModelRecommendation[];
+  trainingCoverage: TrainingCoverage | null;
+  inferenceTimeMs: number | null;
 } | null> => {
   const inferenceUrl = process.env.INFERENCE_SERVER_URL || 'http://localhost:8001';
 
@@ -515,14 +556,45 @@ const callInferenceServer = async (
 
     const data = await response.json();
     logger.info(
-      `[GhostTrace] ML inference: ${data.predictedClass} (${(data.confidence * 100).toFixed(1)}% confidence, ${data.inferenceTimeMs}ms)`,
+      `[GhostTrace] Architecture grade: ${data.predictedClass} (${data.grade}) at ${(data.confidence * 100).toFixed(1)}% confidence, ${data.inferenceTimeMs}ms`,
     );
 
     return {
       predictedClass: data.predictedClass,
+      grade: data.grade,
       confidence: data.confidence,
       classProbabilities: data.classProbabilities,
       topologyEmbedding: data.topologyEmbedding,
+      // nodeRoles is what makes recommendations point at a specific component
+      // rather than describing the graph in general terms.
+      nodeRoles: Array.isArray(data.nodeRoles) ? data.nodeRoles : [],
+      // Counterfactually scored fixes. Guarded rather than assumed: an older
+      // inference server has no such field, and the grade is still useful
+      // without advice.
+      // Guarded with ?? null throughout, so an inference server that predates
+      // the delta model still returns usable recommendations rather than
+      // undefined fields the report would then render as "NaN%".
+      recommendations: Array.isArray(data.recommendations)
+        ? data.recommendations.map((recommendation: Record<string, unknown>) => ({
+            ...recommendation,
+            predictedDeltaPercent:
+              typeof recommendation.predictedDeltaPercent === 'number'
+                ? recommendation.predictedDeltaPercent
+                : null,
+            signConfidence:
+              typeof recommendation.signConfidence === 'number'
+                ? recommendation.signConfidence
+                : null,
+            groundedInPairs:
+              typeof recommendation.groundedInPairs === 'number'
+                ? recommendation.groundedInPairs
+                : null,
+          }))
+        : [],
+      // Absent on an inference server that predates the field, in which case we
+      // simply do not caveat -- silence is better than a fabricated confidence.
+      trainingCoverage: data.trainingCoverage ?? null,
+      inferenceTimeMs: typeof data.inferenceTimeMs === 'number' ? data.inferenceTimeMs : null,
     };
   } catch (err) {
     void err;
@@ -543,14 +615,21 @@ export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTr
   const syntheticSpans = synthesizeTraces(nodes, edges, edgeRisks, trafficPattern, graphHash);
   const rulePrediction = predictAnomalyClass(features, edgeRisks, nodeRisks);
   const isRuleStable = rulePrediction.toLowerCase().startsWith('stable');
+
+  // The GNN grades how risky the topology is; the rule engine names *which*
+  // failure mode is most likely. Keep both: the grade decides whether to raise
+  // an anomaly at all, and the rules supply the label when it does.
   const predictedAnomalyClass =
     mlPrediction === null
       ? rulePrediction
-      : mlPrediction.predictedClass === 'stable' && mlPrediction.confidence > 0.85
-        ? 'stable'
+      : mlPrediction.predictedClass === 'low'
+        ? 'Stable - No Major Anomaly Predicted'
         : isRuleStable
-          ? 'Latency Chain Degradation'
+          ? mlPrediction.predictedClass === 'high'
+            ? 'Tail Latency Amplification'
+            : 'Latency Chain Degradation'
           : rulePrediction;
+
   const heuristicRisk = clamp(
     Math.max(
       edgeRisks[0]?.riskScore ?? 0,
@@ -558,22 +637,20 @@ export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTr
       features.bottleneckScore,
     ),
   );
-  const unstableProbabilityFromMl = mlPrediction
-    ? clamp(
-      typeof mlPrediction.classProbabilities?.unstable === 'number'
-        ? mlPrediction.classProbabilities.unstable
-        : mlPrediction.predictedClass === 'unstable'
-          ? mlPrediction.confidence
-          : 1 - mlPrediction.confidence,
+  const mlRisk = mlPrediction
+    ? expectedRiskFromGrade(
+      mlPrediction.predictedClass,
+      mlPrediction.confidence,
+      mlPrediction.classProbabilities,
     )
     : null;
-  const overallRisk = unstableProbabilityFromMl === null
+  const overallRisk = mlRisk === null
     ? heuristicRisk
-    : clamp((unstableProbabilityFromMl * 0.7) + (heuristicRisk * 0.3));
+    : clamp((mlRisk * 0.7) + (heuristicRisk * 0.3));
 
-  if (unstableProbabilityFromMl !== null) {
+  if (mlRisk !== null) {
     logger.info(
-      `[GhostTrace] Risk composition: overall=${(overallRisk * 100).toFixed(1)}% (ml=${(unstableProbabilityFromMl * 100).toFixed(1)}%, heuristic=${(heuristicRisk * 100).toFixed(1)}%)`,
+      `[GhostTrace] Risk composition: overall=${(overallRisk * 100).toFixed(1)}% (grade ${mlPrediction?.predictedClass}=${(mlRisk * 100).toFixed(1)}%, heuristic=${(heuristicRisk * 100).toFixed(1)}%)`,
     );
   }
 
@@ -628,6 +705,18 @@ export const runGhostTrace = async (request: GhostTraceRequest): Promise<GhostTr
     nodeRisks,
     overallRisk,
     predictedAnomalyClass,
+    architectureGrade: mlPrediction
+      ? {
+        riskClass: mlPrediction.predictedClass,
+        letter: mlPrediction.grade,
+        confidence: mlPrediction.confidence,
+        classProbabilities: mlPrediction.classProbabilities ?? {},
+        inferenceTimeMs: mlPrediction.inferenceTimeMs,
+        nodeRoles: mlPrediction.nodeRoles,
+        recommendations: mlPrediction.recommendations,
+        trainingCoverage: mlPrediction.trainingCoverage,
+      }
+      : null,
     syntheticSpans,
     analysisNarrative,
   };

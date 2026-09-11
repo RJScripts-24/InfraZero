@@ -1,10 +1,22 @@
 import { Router } from 'express';
-import { githubLogin, googleLogin, guestLogin } from '../controllers/auth.controller';
+import { requireAuth } from '../middlewares/requireAuth';
+import {
+  deleteAccount,
+  getCurrentUser,
+  githubLogin,
+  googleLogin,
+  updateProfile,
+} from '../controllers/auth.controller';
 
 const router = Router();
 
+// Public: these are how a session is obtained in the first place.
 router.post('/google', googleLogin);
 router.post('/github', githubLogin);
-router.post('/guest', guestLogin);
+
+// Authenticated account management.
+router.get('/me', requireAuth, getCurrentUser);
+router.patch('/me', requireAuth, updateProfile);
+router.delete('/account', requireAuth, deleteAccount);
 
 export default router;

@@ -53,3 +53,33 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Superseded work from before the microservices rewrite -- 2,626 files of an
+# earlier pipeline that nothing imports. Kept on disk for reference, kept out of
+# the repository because it is 96% of everything untracked here and would bury
+# the pipeline that is actually in use.
+_archive_pre_microservices/
+
+# ...but the trained checkpoints ARE committed, deliberately.
+#
+# `*.pt` above still excludes experimental checkpoints, which is what that rule
+# is for. These three are the shipped artefacts, and without them a clone cannot
+# run at all:
+#
+#   ghosttrace_gnn.pt        loaded by ghosttrace/inference_server.py at startup.
+#                            Absent, the server exits and the backend silently
+#                            degrades to its rule-based fallback.
+#   ghosttrace_gnn_best.pt   the bare state_dict for the same model.
+#   encoder_pretrained.pt    the self-supervised encoder. Needed to reproduce
+#                            training with `train.py --init-encoder`; without it
+#                            that flag exits rather than quietly training from
+#                            scratch and producing a different model.
+#
+# ~1.1MB for all three, against ~40 minutes of retraining for anyone who clones.
+#
+# A negation cannot re-include them here, because `*.pt` matches the files
+# directly and the more specific rule would still need to come after -- simpler
+# and less fragile to add them once with `git add -f`. Since .gitignore does not
+# apply to tracked files, retraining shows up as an ordinary modification:
+#
+#   git add -f ghosttrace/ghosttrace_gnn.pt #              ghosttrace/ghosttrace_gnn_best.pt #              ghosttrace/encoder_pretrained.pt

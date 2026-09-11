@@ -1,0 +1,167 @@
+{
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.15228,
+      "validation_sign_accuracy": 0.42292,
+      "validation_direction_accuracy": 0.56232,
+      "validation_rmse": 1.04044
+    },
+    {
+      "epoch": 2,
+      "train_loss": 1.1243,
+      "validation_sign_accuracy": 0.40241,
+      "validation_direction_accuracy": 0.52517,
+      "validation_rmse": 1.03795
+    },
+    {
+      "epoch": 3,
+      "train_loss": 1.11688,
+      "validation_sign_accuracy": 0.42459,
+      "validation_direction_accuracy": 0.53878,
+      "validation_rmse": 1.03576
+    },
+    {
+      "epoch": 4,
+      "train_loss": 1.11237,
+      "validation_sign_accuracy": 0.42271,
+      "validation_direction_accuracy": 0.52695,
+      "validation_rmse": 1.03846
+    },
+    {
+      "epoch": 5,
+      "train_loss": 1.1077,
+      "validation_sign_accuracy": 0.41685,
+      "validation_direction_accuracy": 0.56546,
+      "validation_rmse": 1.03958
+    },
+    {
+      "epoch": 6,
+      "train_loss": 1.1031,
+      "validation_sign_accuracy": 0.42773,
+      "validation_direction_accuracy": 0.51596,
+      "validation_rmse": 1.03671
+    },
+    {
+      "epoch": 7,
+      "train_loss": 1.0995,
+      "validation_sign_accuracy": 0.42972,
+      "validation_direction_accuracy": 0.55426,
+      "validation_rmse": 1.03632
+    },
+    {
+      "epoch": 8,
+      "train_loss": 1.09664,
+      "validation_sign_accuracy": 0.43412,
+      "validation_direction_accuracy": 0.57122,
+      "validation_rmse": 1.03506
+    },
+    {
+      "epoch": 9,
+      "train_loss": 1.09072,
+      "validation_sign_accuracy": 0.4495,
+      "validation_direction_accuracy": 0.56128,
+      "validation_rmse": 1.03394
+    },
+    {
+      "epoch": 10,
+      "train_loss": 1.0911,
+      "validation_sign_accuracy": 0.44197,
+      "validation_direction_accuracy": 0.56672,
+      "validation_rmse": 1.03676
+    },
+    {
+      "epoch": 11,
+      "train_loss": 1.08752,
+      "validation_sign_accuracy": 0.43768,
+      "validation_direction_accuracy": 0.56829,
+      "validation_rmse": 1.03454
+    },
+    {
+      "epoch": 12,
+      "train_loss": 1.08417,
+      "validation_sign_accuracy": 0.43569,
+      "validation_direction_accuracy": 0.54882,
+      "validation_rmse": 1.03007
+    },
+    {
+      "epoch": 13,
+      "train_loss": 1.08037,
+      "validation_sign_accuracy": 0.44385,
+      "validation_direction_accuracy": 0.54505,
+      "validation_rmse": 1.02925
+    },
+    {
+      "epoch": 14,
+      "train_loss": 1.06919,
+      "validation_sign_accuracy": 0.44092,
+      "validation_direction_accuracy": 0.52758,
+      "validation_rmse": 1.02813
+    },
+    {
+      "epoch": 15,
+      "train_loss": 1.06247,
+      "validation_sign_accuracy": 0.43851,
+      "validation_direction_accuracy": 0.56243,
+      "validation_rmse": 1.02805
+    },
+    {
+      "epoch": 16,
+      "train_loss": 1.05913,
+      "validation_sign_accuracy": 0.43537,
+      "validation_direction_accuracy": 0.55604,
+      "validation_rmse": 1.03241
+    },
+    {
+      "epoch": 17,
+      "train_loss": 1.05561,
+      "validation_sign_accuracy": 0.43496,
+      "validation_direction_accuracy": 0.53585,
+      "validation_rmse": 1.02956
+    },
+    {
+      "epoch": 18,
+      "train_loss": 1.05489,
+      "validation_sign_accuracy": 0.43736,
+      "validation_direction_accuracy": 0.54736,
+      "validation_rmse": 1.02748
+    },
+    {
+      "epoch": 19,
+      "train_loss": 1.04438,
+      "validation_sign_accuracy": 0.43579,
+      "validation_direction_accuracy": 0.54369,
+      "validation_rmse": 1.02846
+    },
+    {
+      "epoch": 20,
+      "train_loss": 1.03993,
+      "validation_sign_accuracy": 0.43862,
+      "validation_direction_accuracy": 0.53731,
+      "validation_rmse": 1.02886
+    }
+  ],
+  "best_epoch": 8,
+  "majority_baseline": 0.584055578483973,
+  "test": {
+    "sign_accuracy": 0.44843798976073557,
+    "direction_accuracy": 0.5843694493783304,
+    "rmse": 1.0790703841711002,
+    "mae": 0.6449878921006593,
+    "n": 9571
+  },
+  "elapsed_seconds": 1018.6,
+  "hyperparameters": {
+    "pairs": "C:\\Users\\rkj24\\OneDrive\\Desktop\\Infrazero\\ml-pipeline\\data\\microservices\\matched_pairs.jsonl",
+    "epochs": 60,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "dropout": 0.25,
+    "patience": 12,
+    "dead_band": 0.1,
+    "magnitude_weight": 0.3,
+    "max_records": 0,
+    "init_encoder": true
+  }
+}

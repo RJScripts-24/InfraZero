@@ -5,19 +5,17 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  Shuffle,
   Edit3,
   Sparkles,
   Check,
   FileImage,
   PanelLeftClose,
+  Save,
   PanelLeftOpen,
   Terminal,
   Zap,
-  Ghost,
-  ShieldAlert,
+  GitBranch,
 } from 'lucide-react';
-import { useLoaderData } from 'react-router';
 import {
   addEdge,
   useNodesState,
@@ -29,16 +27,16 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { FlowCanvas } from '../components/FlowCanvas';
-import { GhostTracePanel } from '../components/GhostTracePanel';
-import { BreachRoomImportModal, type IncidentTimeline } from '../components/BreachRoomImportModal';
-import { BreachRoomPanel, type BreachRoomResult } from '../components/BreachRoomPanel';
+import { useGraphHistory } from '../hooks/useGraphHistory';
 import { ImportDiagramPopup } from '../components/ImportDiagramPopup';
+import { ImportRepoPopup } from '../components/ImportRepoPopup';
 import { ReportView } from '../components/ReportView';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { DEFAULT_ARCHITECTURE_ICON, PRIMITIVE_ITEMS, iconForNode, resolvePrimitiveByText, type PrimitiveItem } from '../lib/architectureIcons';
 import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
+import * as api from '../../lib/api';
+import { toast } from 'sonner';
 import { initCollaboration, destroyCollaboration, setLocalUser, setLocalCursor } from '../../lib/collaboration';
-import type { WorkspaceLoaderData } from '../routes';
 import * as Y from 'yjs';
 
 // ─── Static data ──────────────────────────────────────────────────────────────
@@ -48,8 +46,8 @@ const initialNodes: Node[] = [];
 const edgeBase = {
   type: 'smoothstep',
   animated: false,
-  style: { stroke: 'rgba(59,130,246,0.5)', strokeWidth: 2.5 },
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
+  style: { stroke: 'rgba(148,163,184,0.75)', strokeWidth: 2 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 20, height: 20 },
 };
 
 const initialEdges: Edge[] = [];
@@ -66,7 +64,8 @@ type LibraryCategory = {
   items: LibraryItem[];
 };
 
-const ICON_RENDER_LIMIT_PER_CATEGORY = 80;
+const ICON_INITIAL_RENDER_COUNT = 40;
+const ICON_LOAD_MORE_STEP = 40;
 
 const normalizeIconPath = (rawPath?: string | null): string => {
   if (!rawPath || typeof rawPath !== 'string') {
@@ -130,6 +129,26 @@ const wsUrlFromEnv = (() => {
   }
   return 'ws://localhost:3001';
 })();
+
+/**
+ * Collapses entries that share an id, keeping the last one seen.
+ *
+ * Both peers replace the whole shared Yjs array on every change, and a CRDT
+ * merges two concurrent replacements by keeping both - so the same node
+ * legitimately arrives twice. normalizeNodes renames a repeated id ("db" ->
+ * "db-1"), which is right for a user pasting duplicates but turns a sync
+ * artefact into a phantom component, so remote payloads are collapsed first.
+ */
+const dedupeById = <T,>(items: T[]): T[] => {
+  if (!Array.isArray(items)) return [];
+  const byId = new Map<string, T>();
+  for (const item of items) {
+    const id = String((item as { id?: unknown })?.id ?? '');
+    if (!id) continue;
+    byId.set(id, item);
+  }
+  return [...byId.values()];
+};
 
 const normalizeNodes = (input: any): Node[] => {
   if (!Array.isArray(input)) return [];
@@ -351,6 +370,13 @@ interface SyntheticSpan {
   tags: Record<string, string>;
 }
 
+interface ArchitectureGrade {
+  riskClass: string;
+  letter: string;
+  confidence: number;
+  classProbabilities: Record<string, number>;
+}
+
 interface GhostTraceResult {
   graphHash: string;
   topologyEmbedding: number[];
@@ -358,6 +384,7 @@ interface GhostTraceResult {
   nodeRisks: NodeRiskScore[];
   overallRisk: number;
   predictedAnomalyClass: string;
+  architectureGrade?: ArchitectureGrade | null;
   syntheticSpans: SyntheticSpan[];
   analysisNarrative: string;
 }
@@ -365,10 +392,27 @@ interface GhostTraceResult {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
-  const loaderData = useLoaderData() as WorkspaceLoaderData;
-  const [projectName, setProjectName]     = useState(() => {
-    const roomFromUrl = new URLSearchParams(window.location.search).get('room');
-    return roomFromUrl?.trim() || 'velocis-architecture-v3';
+  // What the workspace is currently editing. `projectId` is null for an unsaved
+  // scratch canvas; everything that persists is gated on it being set.
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [projectId, setProjectId] = useState<string | null>(() => initialParams.get('project'));
+  const [inviteToken] = useState<string | null>(() => initialParams.get('invite'));
+  const [projectName, setProjectName] = useState('Untitled Architecture');
+  const [isProjectLoading, setIsProjectLoading] = useState<boolean>(
+    Boolean(initialParams.get('project') || initialParams.get('invite')),
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+
+  /**
+   * The collaboration room is keyed on the project's immutable id, never on its
+   * name: two people renaming a project must not end up in different rooms, and
+   * two unrelated projects that happen to share a title must not end up in the
+   * same one.
+   */
+  const [roomId, setRoomId] = useState<string>(() => {
+    const pid = initialParams.get('project');
+    return pid ? `infrazero-project-${pid}` : 'infrazero-scratch';
   });
   const [isEditingName, setIsEditingName] = useState(false);
   const [mode, setMode]                   = useState<'edit' | 'sim'>('edit');
@@ -378,24 +422,16 @@ export default function WorkspacePage() {
   const [isGenerating, setIsGenerating]   = useState(false);
   const [linkCopied, setLinkCopied]       = useState(false);
   const [selectedNode, setSelectedNode]   = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge]   = useState<Edge | null>(null);
   const [logs, setLogs]                   = useState<string[]>([]);
   const reactFlowWrapper                  = useRef<HTMLDivElement>(null);
   const [rfInstance, setRfInstance]       = useState<any>(null);
   const [isImportPopupOpen, setIsImportPopupOpen] = useState(false);
+  const [isRepoImportOpen, setIsRepoImportOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [simulationComplete, setSimulationComplete] = useState(false);
-  const [simulationMode, setSimulationMode] = useState<'deterministic' | 'randomized'>('deterministic');
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [simulationResult, setSimulationResult] = useState<any>(null);
-  const [ghostTraceResult, setGhostTraceResult] = useState<GhostTraceResult | null>(null);
-  const [ghostTraceLoading, setGhostTraceLoading] = useState(false);
-  const [ghostPanelOpen, setGhostPanelOpen] = useState(false);
-  const [breachRoomResult, setBreachRoomResult] = useState<BreachRoomResult | null>(null);
-  const [breachRoomLoading, setBreachRoomLoading] = useState(false);
-  const [breachPanelOpen, setBreachPanelOpen] = useState(false);
-  const [importModalOpen, setImportModalOpen] = useState(false);
-  const [incidentTimeline, setIncidentTimeline] = useState<IncidentTimeline | null>(null);
-  const [replayTick, setReplayTick] = useState(0);
   const [ghostTraceRisks, setGhostTraceRisks] = useState<{ edgeRisks: EdgeRiskScore[]; nodeRisks: NodeRiskScore[] }>({
     edgeRisks: [],
     nodeRisks: [],
@@ -415,14 +451,14 @@ export default function WorkspacePage() {
   const isApplyingRemoteEdgesRef = useRef(false);
   const nodesCountRef = useRef(initialNodes.length);
   const edgesCountRef = useRef(initialEdges.length);
-  const [libraryItems, setLibraryItems] = useState<any[]>([]);
-  const [showLibrary, setShowLibrary] = useState(false);
   const [iconSearch, setIconSearch] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [categoryVisibleCounts, setCategoryVisibleCounts] = useState<Record<string, number>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const history = useGraphHistory({ nodes, edges, setNodes, setEdges });
   const filteredLibrary = useMemo(
     () => COMPONENT_LIBRARY
       .map((category) => ({
@@ -434,6 +470,11 @@ export default function WorkspacePage() {
       .filter((category) => category.items.length > 0),
     [iconSearch],
   );
+
+  useEffect(() => {
+    // Reset progressive rendering window when search changes to keep the panel snappy.
+    setCategoryVisibleCounts({});
+  }, [iconSearch]);
 
   useEffect(() => {
     nodesCountRef.current = nodes.length;
@@ -452,7 +493,7 @@ export default function WorkspacePage() {
   useEffect(() => {
     wsRef.current = new WebSocket(wsUrlFromEnv);
     wsRef.current.onopen = () => sendWsMessage({
-      type: 'join_workspace', workspaceId: projectName, userId: `user-${Date.now()}`, userName: 'You'
+      type: 'join_workspace', workspaceId: roomId, userId: `user-${Date.now()}`, userName: 'You'
     });
     wsRef.current.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -481,10 +522,10 @@ export default function WorkspacePage() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [projectName, sendWsMessage, setNodes, setEdges]);
+  }, [roomId, sendWsMessage, setNodes, setEdges]);
 
   useEffect(() => {
-    const { ydoc, provider } = initCollaboration(projectName);
+    const { ydoc, provider } = initCollaboration(roomId);
     ydocRef.current = ydoc;
     providerRef.current = provider;
 
@@ -517,11 +558,11 @@ export default function WorkspacePage() {
     // Hydrate from shared doc if room already has state.
     if (yNodes.length > 0) {
       isApplyingRemoteNodesRef.current = true;
-      setNodes(normalizeNodes(yNodes.toArray()));
+      setNodes(normalizeNodes(dedupeById(yNodes.toArray())));
     }
     if (yEdges.length > 0) {
       isApplyingRemoteEdgesRef.current = true;
-      setEdges(normalizeEdges(yEdges.toArray()));
+      setEdges(normalizeEdges(dedupeById(yEdges.toArray())));
     }
 
     yNodes.observe((_, transaction) => {
@@ -533,7 +574,7 @@ export default function WorkspacePage() {
         return;
       }
       isApplyingRemoteNodesRef.current = true;
-      setNodes(normalizeNodes(remoteNodes));
+      setNodes(normalizeNodes(dedupeById(remoteNodes)));
     });
 
     yEdges.observe((_, transaction) => {
@@ -545,11 +586,11 @@ export default function WorkspacePage() {
         return;
       }
       isApplyingRemoteEdgesRef.current = true;
-      setEdges(normalizeEdges(remoteEdges));
+      setEdges(normalizeEdges(dedupeById(remoteEdges)));
     });
 
     return () => destroyCollaboration();
-  }, [projectName, setNodes, setEdges]);
+  }, [roomId, setNodes, setEdges]);
 
   useEffect(() => {
     if (isApplyingRemoteNodesRef.current) {
@@ -583,31 +624,77 @@ export default function WorkspacePage() {
   }, [edges]);
 
   useEffect(() => {
-    if (isTemporaryGuest()) {
-      return;
-    }
-
-    authFetch('/api/projects/library-of-doom', { credentials: 'include' })
-      .then(r => r.json()).then(setLibraryItems).catch(console.error);
-  }, []);
-
-  useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const generateTickLog = (snapshot: any, tick: number): string | null => {
-    if (!snapshot) return null;
-    const metrics = snapshot.nodeMetrics || [];
-    const failed = metrics.filter((m: any) => m.state === 'FAILED' || m.isOverloaded);
-    const degraded = metrics.filter((m: any) => m.state === 'DEGRADED');
+  /**
+   * First sentence of a withheld-grade explanation, for a one-line terminal
+   * entry. The full text belongs in the report, where there is room for it.
+   */
+  const shortReason = (reason: string | null | undefined): string => {
+    if (!reason) return 'the model made no verdict.';
+    const firstSentence = reason.split(/(?<=\.)\s/)[0];
+    return firstSentence.length > 140 ? `${firstSentence.slice(0, 137)}...` : firstSentence;
+  };
 
-    if (failed.length > 0) {
-      return `[ERROR][Tick ${tick}] ${failed.map((m: any) => m.nodeId).join(', ')} - queue overflow, requests refused`;
+  /**
+   * Name the components a line is about, without letting one line swallow the
+   * terminal. A 56-component import can put every node in the same state.
+   */
+  const namesOf = (metrics: any[]): string => {
+    const ids = metrics.map((m: any) => m.nodeId);
+    if (ids.length <= 3) return ids.join(', ');
+    return `${ids.slice(0, 3).join(', ')} and ${ids.length - 3} more`;
+  };
+
+  /**
+   * One line of terminal output for one snapshot.
+   *
+   * Two things this gets from the data rather than assuming:
+   *
+   *   * the tick. Snapshots are recorded every tenth engine tick, so the array
+   *     index is a tenth of the real tick and labelling with it understated
+   *     every timestamp by 10x.
+   *   * the reason. A component shedding work because its buffer is full and a
+   *     component that lost a request to its own failure rate are different
+   *     findings with different fixes, and printing both as "queue overflow"
+   *     made a rare intrinsic failure read as a capacity problem.
+   *
+   * Engine states arrive snake_case (healthy | degraded | restarting | dead |
+   * partitioned), which is why these compare lowercase -- the previous
+   * uppercase comparisons never matched, so a dead component produced no line
+   * at all.
+   */
+  const generateTickLog = (snapshot: any, index: number): string | null => {
+    if (!snapshot) return null;
+    const tick = Number(snapshot.tick ?? index);
+    const metrics = snapshot.nodeMetrics || [];
+    const stateOf = (m: any) => String(m.state || '').toLowerCase();
+
+    const down = metrics.filter((m: any) => ['dead', 'partitioned'].includes(stateOf(m)));
+    const saturated = metrics.filter((m: any) => m.isOverloaded);
+    const failing = metrics.filter((m: any) => !m.isOverloaded && (m.errorRate || 0) > 0);
+    const degraded = metrics.filter(
+      (m: any) => ['degraded', 'restarting'].includes(stateOf(m)) && !m.isOverloaded,
+    );
+
+    if (down.length > 0) {
+      return `[ERROR][Tick ${tick}] ${namesOf(down)} - unreachable, connections refused`;
+    }
+    if (saturated.length > 0) {
+      const deepest = saturated.reduce(
+        (worst: any, m: any) => ((m.queueDepth || 0) > (worst.queueDepth || 0) ? m : worst),
+        saturated[0],
+      );
+      return `[ERROR][Tick ${tick}] ${namesOf(saturated)} - queue full (depth ${deepest.queueDepth || 0}), requests shed`;
+    }
+    if (failing.length > 0) {
+      return `[WARN][Tick ${tick}] ${namesOf(failing)} - requests failing, queues within capacity`;
     }
     if (degraded.length > 0) {
-      return `[WARN][Tick ${tick}] ${degraded.map((m: any) => m.nodeId).join(', ')} - degraded, elevated latency`;
+      return `[WARN][Tick ${tick}] ${namesOf(degraded)} - degraded, elevated latency`;
     }
-    if (tick % 50 === 0) {
+    if (tick % 500 === 0) {
       const totalReqs = metrics.reduce((sum: number, m: any) => sum + (m.requestsReceived || 0), 0);
       return `[INFO][Tick ${tick}] System nominal - ${totalReqs} requests processed this window`;
     }
@@ -619,16 +706,37 @@ export default function WorkspacePage() {
     setIsSimulating(true);
     setCurrentTick(0);
     let tick = 0;
+    // A component that saturates stays saturated for the rest of the run, so
+    // the same finding would otherwise be printed on every snapshot and bury
+    // everything else. Print it when it starts, and once in a while while it
+    // persists, rather than hundreds of times.
+    let lastFinding = '';
+    let snapshotsSinceLast = 0;
     const interval = setInterval(() => {
       tick += 1;
       setCurrentTick(tick);
       const snapshot = snapshots[tick];
       const tickLog = generateTickLog(snapshot, tick);
-      if (tickLog) setLogs(prev => [...prev, tickLog]);
+      if (tickLog) {
+        // Key on the finding itself: no tick prefix, and no digits, so a queue
+        // depth drifting between 95 and 97 still reads as the same finding.
+        const finding = tickLog.replace(/^\[[^\]]+\]\[Tick \d+\]\s*/, '').replace(/\d+/g, '#');
+        snapshotsSinceLast += 1;
+        if (finding !== lastFinding || snapshotsSinceLast >= 50) {
+          setLogs(prev => [...prev, tickLog]);
+          lastFinding = finding;
+          snapshotsSinceLast = 0;
+        }
+      } else {
+        lastFinding = '';
+      }
       if (tick >= snapshots.length - 1) {
         clearInterval(interval);
         setIsSimulating(false);
-        setLogs(prev => [...prev, `[SYSTEM] Simulation complete. ${snapshots.length} ticks analysed.`]);
+        // Snapshots are every tenth engine tick, so their count is not a tick
+        // count. Report the last tick the engine actually reached.
+        const lastTick = Number((snapshots[snapshots.length - 1] as any)?.tick ?? snapshots.length);
+        setLogs(prev => [...prev, `[SYSTEM] Simulation complete. ${lastTick} ticks analysed.`]);
       }
     }, 100);
     return () => clearInterval(interval);
@@ -672,12 +780,33 @@ export default function WorkspacePage() {
       const active = document.activeElement?.tagName;
       if (active === 'INPUT' || active === 'TEXTAREA') return;
 
+      const modifier = e.ctrlKey || e.metaKey;
+
+      // Undo/redo. Ctrl+Y is the Windows convention, Ctrl+Shift+Z the portable one.
+      if (modifier && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) history.redo();
+        else history.undo();
+        return;
+      }
+      if (modifier && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        history.redo();
+        return;
+      }
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const selectedIds = nodes.filter((n) => n.selected).map((n) => String(n.id));
-        if (selectedIds.length === 0) return;
+        const selectedEdgeIds = edges.filter((edge) => edge.selected).map((edge) => String(edge.id));
+        if (selectedIds.length === 0 && selectedEdgeIds.length === 0) return;
 
-        setNodes((nds) => nds.filter((n) => !selectedIds.includes(String(n.id))));
-        setEdges((eds) => eds.filter((edge) => !selectedIds.includes(String(edge.source)) && !selectedIds.includes(String(edge.target))));
+        if (selectedIds.length > 0) {
+          setNodes((nds) => nds.filter((n) => !selectedIds.includes(String(n.id))));
+        }
+        setEdges((eds) => eds.filter((edge) =>
+          !selectedEdgeIds.includes(String(edge.id))
+          && !selectedIds.includes(String(edge.source))
+          && !selectedIds.includes(String(edge.target))));
       }
 
       if (e.key.toLowerCase() === 'd' && (e.ctrlKey || e.metaKey)) {
@@ -708,7 +837,7 @@ export default function WorkspacePage() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [nodes, setNodes, setEdges]);
+  }, [nodes, edges, setNodes, setEdges, history]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -719,8 +848,8 @@ export default function WorkspacePage() {
               ...params,
               id: `e-${params.source}-${params.target}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
               type: 'smoothstep',
-              style: { stroke: 'rgba(59,130,246,0.5)', strokeWidth: 2.5 },
-              markerEnd: { type: MarkerType.ArrowClosed, color: '#3B82F6', width: 16, height: 16 },
+              style: { stroke: 'rgba(148,163,184,0.75)', strokeWidth: 2 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 20, height: 20 },
               animated: mode === 'sim',
             },
             eds,
@@ -744,15 +873,64 @@ export default function WorkspacePage() {
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
+    setSelectedEdge(null);
   }, []);
 
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null);
+  }, []);
+
+  /**
+   * Write one field of a node's data and keep the inspector's copy in step.
+   *
+   * The inspector previously rendered `defaultValue` inputs with no onChange,
+   * so every control in it was decorative -- nothing it showed was ever read
+   * back by the analysis. These two writers are what make it real.
+   */
+  const updateNodeData = useCallback((nodeId: string, patch: Record<string, unknown>) => {
+    setNodes((nds) => nds.map((node) => (
+      String(node.id) === String(nodeId)
+        ? { ...node, data: { ...(node.data || {}), ...patch } }
+        : node
+    )));
+    setSelectedNode((current) => (
+      current && String(current.id) === String(nodeId)
+        ? { ...current, data: { ...(current.data || {}), ...patch } }
+        : current
+    ));
+  }, [setNodes]);
+
+  const updateEdgeCallKind = useCallback((edgeId: string, callKind: 'read' | 'write' | 'async' | undefined) => {
+    setEdges((eds) => eds.map((edge) => {
+      if (String(edge.id) !== String(edgeId)) return edge;
+      const next: Record<string, unknown> = { ...edge };
+      if (callKind) next.callKind = callKind;
+      else delete next.callKind;
+      // An async handoff is drawn as a dashed line: the caller does not wait,
+      // and that is worth seeing on the canvas rather than only in a panel.
+      next.animated = callKind === 'async';
+      return next as Edge;
+    }));
+    setSelectedEdge((current) => {
+      if (!current || String(current.id) !== String(edgeId)) return current;
+      const next: Record<string, unknown> = { ...current };
+      if (callKind) next.callKind = callKind;
+      else delete next.callKind;
+      next.animated = callKind === 'async';
+      return next as Edge;
+    });
+  }, [setEdges]);
+
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    // Select it too, so the menu's target is unambiguous on screen.
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: String(n.id) === String(node.id) })));
     setContextMenu({
       x: event.clientX,
       y: event.clientY,
       nodeId: String(node.id),
     });
-  }, []);
+  }, [setNodes]);
 
   const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
     setContextMenu({
@@ -760,6 +938,19 @@ export default function WorkspacePage() {
       y: event.clientY,
     });
   }, []);
+
+  // Without this the menu only closed on mouse-leave, so clicking elsewhere on
+  // the canvas left it hanging over the graph.
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('resize', close);
+    };
+  }, [contextMenu]);
 
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -861,7 +1052,7 @@ export default function WorkspacePage() {
       setTerminalExpanded(true);
       setTimeout(() => rfInstance?.fitView?.({ padding: 0.2, duration: 500 }), 50);
 
-      sendWsMessage({ type: 'graph_replace', workspaceId: projectName, nodes: graph.nodes, edges: graph.edges });
+      sendWsMessage({ type: 'graph_replace', workspaceId: roomId, nodes: graph.nodes, edges: graph.edges });
       setAiPrompt('');
     } catch (err) {
       setLogs((prev) => [...prev, `[AI ERROR] ${err instanceof Error ? err.message : 'Unknown generation error'}`]);
@@ -872,54 +1063,189 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleShareClick = () => {
-    const inviteUrl = new URL('/workspace', window.location.origin);
-    inviteUrl.searchParams.set('room', projectName);
-    const link = inviteUrl.toString();
+  /** Point the workspace at a saved project and put its id in the URL. */
+  /**
+   * The single in-flight creation of this canvas's project row, shared by every
+   * caller that needs one. See `handleSaveProject`.
+   */
+  const projectCreationRef = useRef<Promise<string> | null>(null);
 
-    navigator.clipboard.writeText(link).catch(() => {
-      const textArea = document.createElement('textarea');
-      textArea.value = link;
-      textArea.setAttribute('readonly', '');
-      textArea.style.position = 'absolute';
-      textArea.style.left = '-9999px';
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-    });
-
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
-  useEffect(() => {
+  const adoptProject = useCallback((id: string, title: string) => {
+    setProjectId(id);
+    setProjectName(title);
+    setRoomId(`infrazero-project-${id}`);
     const url = new URL(window.location.href);
-    url.searchParams.set('room', projectName);
+    url.searchParams.set('project', id);
+    url.searchParams.delete('invite');
+    url.searchParams.delete('room');
     window.history.replaceState({}, '', url.toString());
-  }, [projectName]);
+  }, []);
 
+  /**
+   * Loads the project named in the URL - either directly by id, or via an invite
+   * token when a collaborator followed a share link.
+   */
   useEffect(() => {
-    if (!loaderData?.autoOpenBreachRoom) {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        if (inviteToken) {
+          const invite = await api.resolveInvite(inviteToken);
+          if (cancelled) return;
+          const graph = sanitizeGraph(invite.nodes || [], invite.edges || []);
+          setNodes(graph.nodes);
+          setEdges(graph.edges);
+          history.reset(graph.nodes, graph.edges);
+          setProjectId(invite.id);
+          setProjectName(invite.title);
+          setRoomId(invite.roomId);
+          setLogs((prev) => [...prev, `[COLLAB] Joined "${invite.title}" as a collaborator.`]);
+          setTimeout(() => rfInstance?.fitView?.({ padding: 0.2, duration: 400 }), 80);
+          return;
+        }
+
+        const id = initialParams.get('project');
+        if (!id) return;
+
+        const project = await api.getProject(id);
+        if (cancelled) return;
+        const graph = sanitizeGraph(project.nodes || [], project.edges || []);
+        setNodes(graph.nodes);
+        setEdges(graph.edges);
+        history.reset(graph.nodes, graph.edges);
+        setProjectName(project.title);
+        setRoomId(`infrazero-project-${project.id}`);
+        setTimeout(() => rfInstance?.fitView?.({ padding: 0.2, duration: 400 }), 80);
+      } catch (err) {
+        if (cancelled) return;
+        toast.error(err instanceof Error ? err.message : 'Could not open that project.');
+      } finally {
+        if (!cancelled) setIsProjectLoading(false);
+      }
+    };
+
+    void load();
+    return () => { cancelled = true; };
+    // Runs once for the id/token the page was opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Persists the current graph. Creates the project first if this is a scratch canvas. */
+  const handleSaveProject = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (isTemporaryGuest()) {
+      if (!options.silent) toast.error('Sign in to save your work.');
+      return null;
+    }
+
+    // A transient empty canvas - a load that failed, a collaboration sync that
+    // arrived empty - must never overwrite a saved graph. Clearing a project on
+    // purpose still saves, but only when the user asked for it explicitly.
+    if (nodes.length === 0 && projectId) {
+      if (options.silent) {
+        return projectId;
+      }
+      const confirmed = window.confirm(
+        'This saves an empty architecture and replaces the components currently stored for this project. Continue?',
+      );
+      if (!confirmed) {
+        return projectId;
+      }
+    }
+
+    setIsSaving(true);
+    try {
+      let id = projectId;
+      if (!id) {
+        // Two callers can arrive here at once: Run Sim saves silently before it
+        // runs, and an explicit Save or a share can still be in flight. Both
+        // would read the same null projectId and create a row of their own,
+        // leaving a duplicate on the dashboard. They share one creation
+        // instead, and the promise is cleared on failure so a later attempt can
+        // still try.
+        if (!projectCreationRef.current) {
+          projectCreationRef.current = api
+            .createProject(projectName)
+            .then((created) => {
+              adoptProject(created.id, projectName);
+              return created.id;
+            })
+            .catch((err) => {
+              projectCreationRef.current = null;
+              throw err;
+            });
+        }
+        id = await projectCreationRef.current;
+      }
+      await api.saveProjectGraph(id, nodes, edges);
+      setLastSavedAt(Date.now());
+      if (!options.silent) toast.success('Project saved.');
+      return id;
+    } catch (err) {
+      if (!options.silent) toast.error(err instanceof Error ? err.message : 'Could not save the project.');
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [projectId, projectName, nodes, edges, adoptProject]);
+
+  /** Commits a rename. The room id is unaffected, so live sessions survive it. */
+  const commitProjectName = useCallback(async (nextName: string) => {
+    const trimmed = nextName.trim();
+    setIsEditingName(false);
+    if (!trimmed || trimmed === projectName) {
+      setProjectName(projectName);
       return;
     }
-    setBreachPanelOpen(true);
-  }, [loaderData?.autoOpenBreachRoom]);
+    setProjectName(trimmed);
 
-  useEffect(() => {
-    if (!incidentTimeline) return;
-    const eventsUpToTick = incidentTimeline.events.filter((_, i) => i <= replayTick);
-    const affectedNow = new Set(eventsUpToTick.map((event) => event.affectedNodeId));
+    if (!projectId || isTemporaryGuest()) return;
+    try {
+      await api.renameProject(projectId, trimmed);
+      toast.success('Project renamed.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not rename the project.');
+    }
+  }, [projectId, projectName]);
 
-    setNodes((nds) => nds.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        breachAffected: affectedNow.has(node.id),
-        breachSeverity: eventsUpToTick.find((event) => event.affectedNodeId === node.id)?.severity,
-      },
-    })));
-  }, [replayTick, incidentTimeline, setNodes]);
+  /**
+   * Issues a real, server-minted invite link.
+   *
+   * A scratch canvas has no project row to share, so it is saved first - a link
+   * to an unsaved graph would open an empty workspace for the recipient.
+   */
+  const handleShareClick = async () => {
+    if (isTemporaryGuest()) {
+      toast.error('Sign in to share a project for live collaboration.');
+      return;
+    }
+
+    // Routed through the ordinary save rather than creating a row of its own.
+    // A second creation path is a second way to end up with two projects for
+    // one canvas, which is exactly what used to happen.
+    let id = projectId;
+    if (!id) {
+      id = await handleSaveProject({ silent: true });
+      if (!id) {
+        toast.error('Could not save the project, so there is nothing to share yet.');
+        return;
+      }
+      toast.success('Project saved so it can be shared.');
+    }
+
+    try {
+      const { inviteLink } = await api.createInviteLink(id);
+      await navigator.clipboard.writeText(inviteLink).catch(() => {
+        // Clipboard is unavailable on insecure origins; show the link instead.
+        window.prompt('Copy this invite link:', inviteLink);
+      });
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+      toast.success('Invite link copied. Anyone with it can edit live.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create an invite link.');
+    }
+  };
 
   const handleKillNode = (nodeId: string) => {
     setChaosEvents(prev => [...prev, {
@@ -962,7 +1288,122 @@ export default function WorkspacePage() {
     setLogs(prev => [...prev, '[CHAOS] All chaos events cleared.']);
   };
 
-  const handleDeployTest = async () => {
+  const [applyingRecommendationId, setApplyingRecommendationId] = useState<string | null>(null);
+
+  /**
+   * Apply one recommendation to the canvas, then re-run the analysis.
+   *
+   * The edits mirror the intervention catalogue the model scored in
+   * `recommend.py` -- a cache absorbing the reads into a store, a shared store
+   * split per consumer, a synchronous call replaced by a queue hop, a replica
+   * behind a balancer, a cycle-closing edge removed. They have to match, or the
+   * change the user applies is not the change that was ranked.
+   *
+   * The re-run is the point. A ranking whose absolute numbers are not
+   * predictions is still useful if you can test it in one click and watch the
+   * ordering move.
+   */
+  const handleApplyChange = useCallback((recommendationId: string) => {
+    const recommendation = (simulationResult?.recommendations ?? [])
+      .find((item: { id: string }) => item.id === recommendationId);
+    if (!recommendation?.kind) return;
+
+    const targets: string[] = (recommendation.targetNodeIds ?? []).map(String);
+    if (targets.length === 0) return;
+
+    const labelOf = (nodeId: string): string => {
+      const found = nodes.find((n) => String(n.id) === nodeId);
+      return String((found?.data as { label?: string } | undefined)?.label ?? nodeId);
+    };
+
+    let nextNodes: Node[] = nodes.map((n) => ({ ...n }));
+    let nextEdges: Edge[] = edges.map((e) => ({ ...e }));
+    const stamp = Date.now();
+    const primary = targets[0];
+
+    const positionNear = (nodeId: string, dx: number, dy: number) => {
+      const anchor = nodes.find((n) => String(n.id) === nodeId);
+      return {
+        x: (anchor?.position?.x ?? 0) + dx,
+        y: (anchor?.position?.y ?? 0) + dy,
+      };
+    };
+
+    if (recommendation.kind === 'add_cache') {
+      const cacheId = `cache-${stamp}`;
+      nextNodes.push({
+        id: cacheId,
+        type: 'custom',
+        position: positionNear(primary, -180, -60),
+        data: { label: `Cache for ${labelOf(primary)}`, type: 'Cache', isActive: true },
+      } as Node);
+      nextEdges = nextEdges.map((edge) => (
+        String(edge.target) === primary
+          ? { ...edge, target: cacheId, id: `${edge.id}-via-cache` }
+          : edge
+      ));
+      nextEdges.push({ id: `e-${cacheId}-${primary}`, source: cacheId, target: primary, callKind: 'read' } as Edge);
+    } else if (recommendation.kind === 'partition_database') {
+      const callers = edges.filter((e) => String(e.target) === primary);
+      nextEdges = nextEdges.filter((e) => String(e.target) !== primary);
+      callers.forEach((caller, index) => {
+        if (index === 0) {
+          nextEdges.push({ ...caller });
+          return;
+        }
+        const shardId = `shard-${stamp}-${index}`;
+        nextNodes.push({
+          id: shardId,
+          type: 'custom',
+          position: positionNear(primary, index * 220, 130),
+          data: { label: `${labelOf(primary)} shard ${index}`, type: 'PostgreSQL', isActive: true },
+        } as Node);
+        nextEdges.push({ id: `e-${caller.source}-${shardId}`, source: caller.source, target: shardId } as Edge);
+      });
+    } else if (recommendation.kind === 'decouple_with_queue' && targets.length >= 2) {
+      const [source, target] = targets;
+      const queueId = `queue-${stamp}`;
+      nextNodes.push({
+        id: queueId,
+        type: 'custom',
+        position: positionNear(target, -160, -70),
+        data: { label: `Queue ${labelOf(source)} to ${labelOf(target)}`, type: 'RabbitMQ', isActive: true },
+      } as Node);
+      nextEdges = nextEdges.filter((e) => !(String(e.source) === source && String(e.target) === target));
+      nextEdges.push({ id: `e-${source}-${queueId}`, source, target: queueId, callKind: 'async', animated: true } as Edge);
+      nextEdges.push({ id: `e-${queueId}-${target}`, source: queueId, target } as Edge);
+    } else if (recommendation.kind === 'replicate') {
+      // The canvas already models a replicated tier as an instance count, which
+      // is both truer to how these are deployed and something the simulator
+      // reads directly -- so this raises `replicas` rather than drawing a
+      // second box and a balancer beside it.
+      nextNodes = nextNodes.map((node) => {
+        if (String(node.id) !== primary) return node;
+        const current = Number((node.data as { replicas?: number })?.replicas ?? 1);
+        return { ...node, data: { ...(node.data || {}), replicas: Math.max(2, current + 1) } };
+      });
+    } else if (recommendation.kind === 'break_cycle' && targets.length >= 2) {
+      const [source, target] = targets;
+      nextEdges = nextEdges.filter((e) => !(String(e.source) === source && String(e.target) === target));
+    } else {
+      toast.error('That change cannot be applied to the canvas automatically.');
+      return;
+    }
+
+    setApplyingRecommendationId(recommendationId);
+    setNodes(nextNodes);
+    setEdges(nextEdges);
+    setLogs((prev) => [...prev, `[APPLY] ${recommendation.title} - re-running analysis...`]);
+
+    void handleDeployTest({ nodes: nextNodes, edges: nextEdges })
+      .finally(() => setApplyingRecommendationId(null));
+    // handleDeployTest is declared below and is stable for this purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simulationResult, nodes, edges, setNodes, setEdges]);
+
+  const handleDeployTest = async (
+    override?: { nodes: Node[]; edges: Edge[] },
+  ) => {
     if (isTemporaryGuest()) {
       setLogs(prev => [...prev, '[GUEST] Simulation run requires authenticated account.']);
       setTerminalExpanded(true);
@@ -975,13 +1416,15 @@ export default function WorkspacePage() {
     setIsSimulating(false);
     setCurrentTick(0);
     setSnapshots([]);
-    setLogs([
-      '[SYSTEM] Initializing simulation engine...',
-      `[MODE] ${simulationMode === 'deterministic' ? 'Deterministic Baseline' : 'Randomized Stress Test'}`,
-    ]);
+    setLogs(['[SYSTEM] Initializing simulation engine...']);
     try {
-      const cleanGraph = sanitizeGraph(nodes, edges);
-      if (cleanGraph.nodes.length !== nodes.length || cleanGraph.edges.length !== edges.length) {
+      // An applied recommendation passes its mutated graph in directly: React
+      // state has not committed yet at that point, so reading `nodes` here
+      // would re-run the analysis on the graph as it was before the change.
+      const sourceNodes = override?.nodes ?? nodes;
+      const sourceEdges = override?.edges ?? edges;
+      const cleanGraph = sanitizeGraph(sourceNodes, sourceEdges);
+      if (cleanGraph.nodes.length !== sourceNodes.length || cleanGraph.edges.length !== sourceEdges.length) {
         setNodes(cleanGraph.nodes);
         setEdges(cleanGraph.edges);
         setLogs((prev) => [
@@ -990,16 +1433,27 @@ export default function WorkspacePage() {
         ]);
       }
 
-      const runSeed = simulationMode === 'randomized' ? Date.now() % 0xFFFFFFFF : undefined;
+      if (cleanGraph.nodes.length === 0) {
+        setLogs((prev) => [
+          ...prev,
+          '[ERROR] There are no components on the canvas to simulate. Add components, or reopen the project if it failed to load.',
+        ]);
+        setSimulationComplete(true);
+        return;
+      }
+
+      // Saving first means the run is attributed to a real project row, which is
+      // what allows the report to be reopened and exported later.
+      const savedProjectId = await handleSaveProject({ silent: true });
+
       const payload: Record<string, unknown> = {
         nodes: cleanGraph.nodes,
         edges: cleanGraph.edges,
         chaosEnabled: chaosEvents.length > 0,
         chaosEvents,
+        projectId: savedProjectId ?? projectId,
+        projectName,
       };
-      if (typeof runSeed === 'number') {
-        payload.seed = runSeed;
-      }
 
       const response = await authFetch('/api/simulations/run', {
         method: 'POST',
@@ -1009,14 +1463,55 @@ export default function WorkspacePage() {
       if (!response.ok) throw new Error(`Simulation failed: ${response.statusText}`);
       const result = await response.json();
       setSnapshots(result.snapshots || []);
+
+      const intelligence = result.intelligence ?? {};
+      const nodeFindings = intelligence.nodeFindings ?? [];
+      const edgeFindings = intelligence.edgeFindings ?? [];
+
       setLogs(prev => [
         ...prev,
         '[SYSTEM] Simulation engine initialized.',
         `[INFO] Universe Seed: ${result.universeSeed}`,
-        `[HASH] Graph hash: ${result.graphHash?.slice(0, 16)}...`,
-        `[INFO] Processing ${result.totalRequests?.toLocaleString()} requests...`,
+        `[HASH] Stable hash: ${result.stableHash?.slice(0, 16)}...`,
+        `[INFO] Processing ${result.metrics?.totalRequests?.toLocaleString() ?? 0} requests...`,
+        intelligence.model
+          ? `[MODEL] ${intelligence.model.riskClass} risk at ${(intelligence.model.confidence * 100).toFixed(0)}% confidence.`
+          : '[MODEL] Inference server unreachable - report falls back to rule-based analysis.',
+        `[ANALYSIS] ${intelligence.predictedFailureMode ?? 'No failure mode predicted'}.`,
+        // The simulation reports what it measures. It no longer issues a letter
+        // of its own: two letters from two graders disagreed in the same log.
+        `[SIM] Simulated resilience ${result.simulatedResilienceScore ?? 0}/100 at the load this run used.`,
+        result.grade
+          ? `[RESULT] Grade ${result.grade}, ${result.recommendations?.length ?? 0} recommendations.`
+          : `[RESULT] Grade withheld - ${shortReason(result.gradeWithheldReason)} ${result.recommendations?.length ?? 0} recommendations still apply.`,
       ]);
-      setSimulationResult({ ...result, groqReview: result.groqReview || '' });
+
+      // The architecture analysis now arrives with the simulation, so the canvas
+      // risk shading is fed from the same run rather than a separate pass.
+      setGhostTraceRisks({
+        edgeRisks: edgeFindings.map((finding: any) => ({
+          edgeId: finding.edgeId,
+          source: finding.source,
+          target: finding.target,
+          riskScore: finding.riskScore,
+          reasons: finding.reasons ?? [],
+        })),
+        nodeRisks: nodeFindings.map((finding: any) => ({
+          nodeId: finding.nodeId,
+          label: finding.label,
+          riskScore: finding.riskScore,
+          reasons: finding.reasons ?? [],
+        })),
+      });
+      setNodes(nds => nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          ghostRisk: nodeFindings.find((finding: any) => finding.nodeId === node.id)?.riskScore,
+        },
+      })));
+
+      setSimulationResult(result);
       setEdges(eds => eds.map(e => ({ ...e, animated: true })));
       setSimulationComplete(true);
     } catch (err) {
@@ -1026,7 +1521,59 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleImportDiagram = (importedNodes: any[], importedEdges: any[]) => {
+  /**
+   * Dashboard deep links: `?run=1` starts a simulation as soon as the project's
+   * graph has loaded, `?report=1` opens the most recent stored report.
+   */
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || isProjectLoading) return;
+
+    const wantsRun = initialParams.get('run') === '1';
+    const wantsReport = initialParams.get('report') === '1';
+    if (!wantsRun && !wantsReport) return;
+
+    deepLinkHandled.current = true;
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('run');
+    url.searchParams.delete('report');
+    window.history.replaceState({}, '', url.toString());
+
+    if (wantsRun) {
+      if (nodes.length === 0) {
+        toast.error('This project has no components to simulate yet.');
+        return;
+      }
+      void handleDeployTest();
+      return;
+    }
+
+    if (!projectId) return;
+    api
+      .getLatestReport(projectId)
+      .then((report) => {
+        setSimulationResult(report);
+        setIsReportOpen(true);
+      })
+      .catch(() => toast.error('No report yet - run a simulation first.'));
+    // Fires once, after the project finishes loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProjectLoading, nodes.length]);
+
+  /**
+   * Load an imported architecture onto the canvas.
+   *
+   * Shared by both import paths. `source` only changes what the terminal says --
+   * it used to be hard-coded to the vision importer, which meant a repository
+   * import reported "Vision API analysis complete" and gave the user no way to
+   * tell which path had actually run.
+   */
+  const handleImportDiagram = (
+    importedNodes: any[],
+    importedEdges: any[],
+    source: 'vision' | 'repository' = 'vision',
+  ) => {
     const importedGraph = sanitizeGraph(importedNodes, importedEdges);
     const separatedNodes = resolveNodeOverlaps(importedGraph.nodes);
     setNodes(separatedNodes.map((node) => ({
@@ -1037,137 +1584,24 @@ export default function WorkspacePage() {
     setTimeout(() => rfInstance?.fitView?.({ padding: 0.2, duration: 500 }), 50);
 
     setTerminalExpanded(true);
+    // Instance counts only arrive from a repository, and they change the
+    // analysis, so the terminal states whether any were recovered.
+    const replicated = importedGraph.nodes.filter(
+      (node: any) => Number(node.data?.replicas ?? 1) > 1,
+    ).length;
     const importLogs = [
-      '[IMPORT] Vision API analysis complete',
+      source === 'repository'
+        ? '[IMPORT] Repository manifests parsed'
+        : '[IMPORT] Vision API analysis complete',
       `[GRAPH] Loaded ${importedGraph.nodes.length} components and ${importedGraph.edges.length} flows`,
+      ...(source === 'repository'
+        ? [replicated > 0
+            ? `[SCALE] ${replicated} components declare more than one instance`
+            : '[SCALE] No instance counts declared; every component analysed as a single instance']
+        : []),
       '[READY] Workspace re-synchronized',
     ];
     setLogs(importLogs);
-  };
-
-  const runGhostTrace = async () => {
-    if (isTemporaryGuest()) {
-      setLogs(prev => [...prev, '[GHOSTTRACE] GhostTrace analysis requires authenticated account.']);
-      setTerminalExpanded(true);
-      return;
-    }
-
-    setGhostTraceLoading(true);
-    try {
-      const cleanGraph = sanitizeGraph(nodes, edges);
-      const response = await authFetch('/api/ghosttrace/analyze', {
-        method: 'POST',
-        credentials: 'include',
-        body: JSON.stringify({
-          nodes: cleanGraph.nodes,
-          edges: cleanGraph.edges,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`GhostTrace failed: ${response.statusText}`);
-      }
-
-      const data = await response.json() as GhostTraceResult;
-      setGhostTraceResult(data);
-      setGhostTraceRisks({
-        edgeRisks: data.edgeRisks || [],
-        nodeRisks: data.nodeRisks || [],
-      });
-      setNodes(nds => nds.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          ghostRisk: data.nodeRisks.find((risk) => risk.nodeId === node.id)?.riskScore,
-        },
-      })));
-      setLogs(prev => [
-        ...prev,
-        `[GHOSTTRACE] ${data.predictedAnomalyClass} detected.`,
-        `[GHOSTTRACE] Overall risk ${(data.overallRisk * 100).toFixed(0)}% across ${data.edgeRisks.length} edges and ${data.nodeRisks.length} nodes.`,
-      ]);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown GhostTrace error';
-      setLogs(prev => [...prev, `[GHOSTTRACE ERROR] ${message}`]);
-    } finally {
-      setGhostTraceLoading(false);
-    }
-  };
-
-  const runBreachRoomAnalysis = async (timeline: IncidentTimeline) => {
-    if (!ghostTraceResult) {
-      setLogs((prev) => [...prev, '[BREACHROOM] Run GhostTrace before incident recall analysis.']);
-      setTerminalExpanded(true);
-      return;
-    }
-
-    setBreachRoomLoading(true);
-    setBreachPanelOpen(true);
-    setImportModalOpen(false);
-
-    try {
-      const cleanGraph = sanitizeGraph(nodes, edges);
-      const response = await authFetch('/api/breachroom/analyze', {
-        method: 'POST',
-        credentials: 'include',
-        body: JSON.stringify({
-          nodes: cleanGraph.nodes,
-          edges: cleanGraph.edges,
-          ghostTraceResult,
-          incidentSource: timeline.source,
-          manualEvents: timeline.events,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.message || payload?.error || 'BreachRoom analysis failed.');
-      }
-
-      const rawResult = (payload?.result || payload) as Partial<BreachRoomResult> & {
-        analysisNarrative?: string;
-      };
-      const rawRecall = rawResult.recallScore || ({} as BreachRoomResult['recallScore']);
-      const result: BreachRoomResult = {
-        recallScore: {
-          ...rawRecall,
-          recall: rawRecall.recall ?? 0,
-          precision: rawRecall.precision ?? 0,
-          f1Score: rawRecall.f1Score ?? 0,
-          truePositives: rawRecall.truePositives ?? 0,
-          falseNegatives: rawRecall.falseNegatives ?? 0,
-          actualAffectedEdges: rawRecall.actualAffectedEdges ?? [],
-          predictedEdgeRisks: rawRecall.predictedEdgeRisks?.length
-            ? rawRecall.predictedEdgeRisks
-            : ghostTraceResult.edgeRisks.map((edgeRisk) => ({
-                edgeId: edgeRisk.edgeId,
-                riskScore: edgeRisk.riskScore,
-              })),
-        },
-        revisionSuggestions: rawResult.revisionSuggestions || [],
-        aiNarrative: rawResult.aiNarrative || rawResult.analysisNarrative || '',
-      };
-      setBreachRoomResult(result);
-      setIncidentTimeline(timeline);
-      setReplayTick(0);
-      setNodes((nds) => nds.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          breachAffected: timeline.affectedNodeIds.includes(String(node.id)),
-        },
-      })));
-
-      setLogs((prev) => [
-        ...prev,
-        `[BREACHROOM] Recall ${(result.recallScore.recall * 100).toFixed(0)}% | Precision ${(result.recallScore.precision * 100).toFixed(0)}%.`,
-      ]);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown BreachRoom error';
-      setLogs((prev) => [...prev, `[BREACHROOM ERROR] ${message}`]);
-    } finally {
-      setBreachRoomLoading(false);
-    }
   };
 
   return (
@@ -1197,8 +1631,12 @@ export default function WorkspacePage() {
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  onBlur={() => setIsEditingName(false)}
-                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingName(false)}
+                  onBlur={(e) => void commitProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void commitProjectName((e.target as HTMLInputElement).value);
+                    if (e.key === 'Escape') setIsEditingName(false);
+                  }}
+                  maxLength={120}
                   autoFocus
                   className="bg-transparent border-b border-blue-500 outline-none text-white font-bold text-lg tracking-tight w-[280px]"
                 />
@@ -1210,7 +1648,15 @@ export default function WorkspacePage() {
               )}
               <div className="mt-0.5 text-[10px] font-mono font-bold tracking-[0.2em] text-blue-500/60 flex items-center gap-2 uppercase">
                 <div className={`w-1 h-1 rounded-full ${mode === 'sim' ? 'bg-blue-500 animate-pulse' : 'bg-zinc-700'}`} />
-                {mode === 'sim' ? 'Engine Hot_ Replications Running' : 'Synchronized Locally'}
+                {mode === 'sim'
+                  ? 'Engine Hot_ Replications Running'
+                  : isSaving
+                    ? 'Saving...'
+                    : lastSavedAt
+                      ? `Saved ${new Date(lastSavedAt).toLocaleTimeString()}`
+                      : projectId
+                        ? 'Saved project'
+                        : 'Unsaved draft'}
               </div>
             </div>
           </div>
@@ -1261,6 +1707,22 @@ export default function WorkspacePage() {
               ))}
             </div>
 
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => void handleSaveProject()}
+                  disabled={isSaving}
+                  className="h-9 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 text-white/80 hover:text-white hover:bg-white/10 transition-all text-[10px] font-bold uppercase tracking-wide disabled:opacity-40"
+                >
+                  <Save size={14} />
+                  {isSaving ? 'Saving' : 'Save'}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
+                Save this architecture to your projects
+              </TooltipContent>
+            </Tooltip>
+
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
@@ -1270,60 +1732,6 @@ export default function WorkspacePage() {
               DEPLOY & TEST
             </motion.button>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => {
-                    setGhostPanelOpen(true);
-                    void runGhostTrace();
-                  }}
-                  className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-amber-100 shadow-xl transition-all hover:bg-amber-500/15"
-                >
-                  <Ghost size={14} />
-                  GhostTrace
-                </motion.button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
-                GhostTrace Analysis
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span>
-                  <motion.button
-                    whileHover={{ scale: ghostTraceResult ? 1.02 : 1 }}
-                    whileTap={{ scale: ghostTraceResult ? 0.98 : 1 }}
-                    onClick={() => setImportModalOpen(true)}
-                    disabled={!ghostTraceResult}
-                    className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-red-100 shadow-xl transition-all hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <ShieldAlert size={14} />
-                    BreachRoom
-                  </motion.button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
-                {!ghostTraceResult ? 'Run GhostTrace first' : 'BreachRoom'}
-              </TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => setSimulationMode((prev) => (prev === 'deterministic' ? 'randomized' : 'deterministic'))}
-                  className="h-9 flex items-center gap-2 rounded-full border border-white/10 px-3 text-white/80 hover:text-white hover:bg-white/5 transition-all text-[10px] font-bold uppercase tracking-wide"
-                >
-                  <Shuffle size={14} />
-                  {simulationMode === 'deterministic' ? 'Deterministic' : 'Randomized'}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="bg-zinc-900 text-zinc-100">
-                {simulationMode === 'deterministic' ? 'Deterministic mode' : 'Randomized mode'}
-              </TooltipContent>
-            </Tooltip>
           </div>
         </div>
       </motion.header>
@@ -1361,56 +1769,67 @@ export default function WorkspacePage() {
               <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                 {activeTab === 'ai' ? (
                   <div className="space-y-6">
-                    <div className="relative">
-                       <textarea
-                        value={aiPrompt}
-                        onChange={(e) => setAiPrompt(e.target.value)}
-                        placeholder={'Enter technical prompt...\ne.g. "Microservices with distributed cache"'}
-                        className="w-full bg-black/40 border border-white/10 rounded-[20px] p-6 resize-none outline-none text-white text-sm font-medium tracking-tight placeholder:text-zinc-700 focus:border-blue-500/50 transition-all custom-scrollbar"
-                        rows={8}
-                      />
-                      <div className="absolute right-4 bottom-4 text-[9px] font-mono text-zinc-700 tracking-wider font-bold">ALPHA_v0.9</div>
+                    {/*
+                      Ordered by how much the analysis can actually trust the
+                      input, not by how impressive it looks.
+
+                      A repository carries instance counts, real wiring and
+                      resilience configuration, and never goes stale. A picture
+                      of a diagram carries none of those, so it sits last with
+                      the caveat attached rather than presented as an equal.
+                    */}
+                    <div>
+                      <motion.button
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setIsRepoImportOpen(true)}
+                        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-600 transition-all"
+                      >
+                        <GitBranch size={18} />
+                        IMPORT FROM REPOSITORY
+                      </motion.button>
+                      <p className="mt-2 px-1 text-[10px] text-zinc-600 leading-relaxed">
+                        Reads your manifests: components, wiring, and instance counts.
+                      </p>
                     </div>
-                    
-                    <motion.button
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleGenerate}
-                      disabled={isGenerating}
-                      className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-blue-500 text-white font-bold text-sm shadow-xl shadow-blue-500/20 hover:bg-blue-600 transition-all"
-                    >
-                      <Sparkles size={18} className={isGenerating ? 'animate-spin' : ''} />
-                      {isGenerating ? 'COMPUTING...' : 'GENERATE TOPOLOGY'}
-                    </motion.button>
-                    
-                    <div className="pt-6 border-t border-white/5">
+
+                    <div className="pt-5 border-t border-white/5 space-y-3">
+                      <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">
+                        Or start from nothing
+                      </div>
+                      <div className="relative">
+                        <textarea
+                          value={aiPrompt}
+                          onChange={(e) => setAiPrompt(e.target.value)}
+                          placeholder={'Enter technical prompt...\ne.g. "Microservices with distributed cache"'}
+                          className="w-full bg-black/40 border border-white/10 rounded-[20px] p-5 resize-none outline-none text-white text-sm font-medium tracking-tight placeholder:text-zinc-700 focus:border-blue-500/50 transition-all custom-scrollbar"
+                          rows={5}
+                        />
+                        <div className="absolute right-4 bottom-4 text-[9px] font-mono text-zinc-700 tracking-wider font-bold">ALPHA_v0.9</div>
+                      </div>
+
+                      <button
+                        onClick={handleGenerate}
+                        disabled={isGenerating}
+                        className="w-full flex items-center justify-center gap-3 py-3 rounded-2xl border border-white/10 bg-white/5 text-zinc-300 font-bold text-sm hover:text-white hover:bg-white/10 transition-all"
+                      >
+                        <Sparkles size={16} className={isGenerating ? 'animate-spin' : ''} />
+                        {isGenerating ? 'COMPUTING...' : 'GENERATE TOPOLOGY'}
+                      </button>
+                    </div>
+
+                    <div className="pt-5 border-t border-white/5">
                       <button
                         onClick={() => setIsImportPopupOpen(true)}
-                        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl border border-white/5 bg-white/5 text-zinc-400 font-bold text-sm hover:text-white hover:bg-white/10 transition-all"
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/5 text-zinc-500 font-bold text-xs hover:text-zinc-300 hover:bg-white/5 transition-all"
                       >
-                        <FileImage size={18} />
-                        IMPORT VISION DATA
+                        <FileImage size={14} />
+                        IMPORT DIAGRAM IMAGE
                       </button>
-
-                      <button onClick={() => setShowLibrary(!showLibrary)}
-                        className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl border border-red-500/20 bg-red-500/5 text-red-400 font-bold text-sm hover:bg-red-500/10 transition-all mt-3">
-                        LIBRARY OF DOOM
-                      </button>
-
-                      {showLibrary && libraryItems.map(item => (
-                        <div key={item.id} onClick={() => {
-                          if (item.graph_json) {
-                            const g = JSON.parse(item.graph_json);
-                            setNodes(g.nodes || []); setEdges(g.edges || []);
-                            setShowLibrary(false);
-                            setLogs([`[DOOM] Loaded: ${item.name}`, '[WARN] This architecture contains known failure patterns.']);
-                            setTerminalExpanded(true);
-                          }
-                        }} className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 cursor-pointer hover:bg-red-500/10 transition-all mt-2">
-                          <div className="text-red-400 font-bold text-sm">{item.name}</div>
-                          <div className="text-zinc-600 text-xs mt-1">{item.description}</div>
-                        </div>
-                      ))}
+                      <p className="mt-2 px-1 text-[10px] text-zinc-600 leading-relaxed">
+                        A picture cannot state instance counts or call types, so everything
+                        is treated as one synchronous instance.
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -1424,7 +1843,8 @@ export default function WorkspacePage() {
 
                     {filteredLibrary.map((category) => {
                       const isCollapsed = collapsedCategories[category.category] ?? true;
-                      const visibleItems = category.items.slice(0, ICON_RENDER_LIMIT_PER_CATEGORY);
+                      const visibleCount = categoryVisibleCounts[category.category] ?? ICON_INITIAL_RENDER_COUNT;
+                      const visibleItems = category.items.slice(0, visibleCount);
                       const hiddenCount = Math.max(0, category.items.length - visibleItems.length);
                       return (
                         <div key={category.category} className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
@@ -1449,11 +1869,11 @@ export default function WorkspacePage() {
                                   draggable
                                   onDragStartCapture={(e) => onDragStart(e, item)}
                                 >
-                                  <div className="w-9 h-9 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
+                                  <div className="w-12 h-12 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
                                     <img
                                       src={normalizeIconPath(item.iconPath)}
                                       alt={item.name}
-                                      className="w-8 h-8 object-contain"
+                                      className="w-11 h-11 object-contain"
                                       loading="lazy"
                                       onError={(event) => {
                                         const current = event.currentTarget;
@@ -1465,13 +1885,19 @@ export default function WorkspacePage() {
                                       }}
                                     />
                                   </div>
-                                  <div className="text-zinc-200 font-semibold text-[11px] text-center leading-tight line-clamp-2">{item.name}</div>
+                                  <div className="text-zinc-200 font-semibold text-[12.5px] text-center leading-tight line-clamp-2" title={item.name}>{item.name}</div>
                                 </motion.div>
                               ))}
                               {hiddenCount > 0 && (
-                                <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-zinc-500">
-                                  Showing first {ICON_RENDER_LIMIT_PER_CATEGORY} items. Refine search to narrow {hiddenCount} more.
-                                </div>
+                                <button
+                                  onClick={() => setCategoryVisibleCounts((prev) => ({
+                                    ...prev,
+                                    [category.category]: (prev[category.category] ?? ICON_INITIAL_RENDER_COUNT) + ICON_LOAD_MORE_STEP,
+                                  }))}
+                                  className="col-span-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-zinc-400 hover:text-white hover:border-blue-500/40 transition-all"
+                                >
+                                  Load more ({hiddenCount} remaining)
+                                </button>
                               )}
                             </div>
                           )}
@@ -1485,9 +1911,75 @@ export default function WorkspacePage() {
           )}
         </AnimatePresence>
 
+        {/*
+          Link inspector. `callKind` has existed in the graph types, the
+          simulation bridge and the Rust engine the whole time, and no part of
+          the UI could set it -- so an async handoff was always analysed as a
+          blocking call, and decoupling could never change a result.
+        */}
+        <AnimatePresence>
+          {selectedEdge && (
+            <motion.aside
+              initial={{ x: 340, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: 340, opacity: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="w-[300px] border-l border-white/5 bg-zinc-950/40 backdrop-blur-3xl p-5 overflow-y-auto z-20 custom-scrollbar"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <div className="text-blue-500 text-[10px] font-bold uppercase tracking-[0.2em]">Link Inspector</div>
+                <button onClick={() => setSelectedEdge(null)} className="text-zinc-600 hover:text-white transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-white text-sm font-bold tracking-tight mb-1 break-words">
+                  {String((nodes.find((n) => String(n.id) === String(selectedEdge.source))?.data as { label?: string } | undefined)?.label ?? selectedEdge.source)}
+                  <span className="text-zinc-600 mx-2">&rarr;</span>
+                  {String((nodes.find((n) => String(n.id) === String(selectedEdge.target))?.data as { label?: string } | undefined)?.label ?? selectedEdge.target)}
+                </h3>
+              </div>
+
+              <div className="space-y-3">
+                <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2">
+                  Call type
+                </div>
+                {([
+                  { value: undefined, label: 'Synchronous (default)', hint: 'The caller waits. The conservative reading.' },
+                  { value: 'read' as const, label: 'Read', hint: 'Cacheable, and contends less than a write.' },
+                  { value: 'write' as const, label: 'Write', hint: 'Contends on a shared store.' },
+                  { value: 'async' as const, label: 'Async', hint: 'The caller does not wait at all.' },
+                ]).map((option) => {
+                  const current = (selectedEdge as unknown as { callKind?: string }).callKind;
+                  const isActive = current === option.value;
+                  return (
+                    <button
+                      key={option.label}
+                      onClick={() => updateEdgeCallKind(selectedEdge.id, option.value)}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all ${
+                        isActive
+                          ? 'border-blue-500/50 bg-blue-500/10 text-white'
+                          : 'border-white/5 bg-black/20 text-zinc-400 hover:bg-white/5 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{option.label}</div>
+                      <div className="text-[10px] text-zinc-600 mt-0.5 leading-relaxed">{option.hint}</div>
+                    </button>
+                  );
+                })}
+                <p className="text-[10px] text-zinc-600 leading-relaxed px-1 pt-2">
+                  The engine honours this: an async edge ends the caller&apos;s wait, which
+                  is what makes decoupling show up as a lower simulated tail latency.
+                </p>
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
         {/* Canvas Area */}
         <div className="flex-1 relative z-10" ref={reactFlowWrapper} onMouseMove={(e) => {
-          sendWsMessage({ type: 'cursor_move', workspaceId: projectName, userId: 'local', x: e.clientX, y: e.clientY });
+          sendWsMessage({ type: 'cursor_move', workspaceId: roomId, userId: 'local', x: e.clientX, y: e.clientY });
           if (providerRef.current) {
             setLocalCursor(providerRef.current, e.clientX, e.clientY);
           }
@@ -1508,12 +2000,17 @@ export default function WorkspacePage() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onInit={setRfInstance}
             onDrop={onDrop}
             onDragOver={onDragOver}
             onNodeContextMenu={onNodeContextMenu}
             onPaneContextMenu={onPaneContextMenu}
             onNodeLabelChange={handleNodeLabelChange}
+            onUndo={history.undo}
+            onRedo={history.redo}
+            canUndo={history.canUndo}
+            canRedo={history.canRedo}
             killedNodes={killedNodes}
             degradedNodes={degradedNodes}
             simulationSnapshots={snapshots}
@@ -1524,32 +2021,55 @@ export default function WorkspacePage() {
 
           {contextMenu && (
             <div
-              className="fixed z-50 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[160px]"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-              onMouseLeave={() => setContextMenu(null)}
+              className="fixed z-50 bg-zinc-900 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[190px]"
+              style={{
+                // Near the right/bottom edge the menu would otherwise open off-screen.
+                left: Math.min(contextMenu.x, window.innerWidth - 210),
+                top: Math.min(contextMenu.y, window.innerHeight - 130),
+              }}
             >
               {contextMenu.nodeId ? (
                 <>
                   <button
                     onClick={() => duplicateNode(contextMenu.nodeId!)}
-                    className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
+                    className="flex w-full items-center justify-between gap-6 px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
                   >
                     Duplicate
+                    <span className="font-mono text-[10px] text-zinc-600">Ctrl+D</span>
                   </button>
                   <button
                     onClick={() => deleteNode(contextMenu.nodeId!)}
-                    className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
+                    className="flex w-full items-center justify-between gap-6 px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10"
                   >
-                    Delete
+                    Delete node
+                    <span className="font-mono text-[10px] text-red-400/50">Del</span>
                   </button>
                 </>
               ) : (
                 <>
                   <button
+                    onClick={() => { history.undo(); setContextMenu(null); }}
+                    disabled={!history.canUndo}
+                    className="flex w-full items-center justify-between gap-6 px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600 disabled:hover:bg-transparent"
+                  >
+                    Undo
+                    <span className="font-mono text-[10px] text-zinc-600">Ctrl+Z</span>
+                  </button>
+                  <button
+                    onClick={() => { history.redo(); setContextMenu(null); }}
+                    disabled={!history.canRedo}
+                    className="flex w-full items-center justify-between gap-6 px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:text-zinc-600 disabled:hover:bg-transparent"
+                  >
+                    Redo
+                    <span className="font-mono text-[10px] text-zinc-600">Ctrl+Shift+Z</span>
+                  </button>
+                  <div className="my-1 h-px bg-white/10" />
+                  <button
                     onClick={handleSelectAll}
-                    className="w-full px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
+                    className="flex w-full items-center justify-between gap-6 px-4 py-2 text-left text-sm text-zinc-300 hover:bg-white/5 hover:text-white"
                   >
                     Select all
+                    <span className="font-mono text-[10px] text-zinc-600">Ctrl+A</span>
                   </button>
                   <button
                     onClick={handleClearCanvas}
@@ -1561,35 +2081,6 @@ export default function WorkspacePage() {
               )}
             </div>
           )}
-
-          <AnimatePresence>
-            {ghostPanelOpen && (
-              <GhostTracePanel
-                isOpen={ghostPanelOpen}
-                onClose={() => setGhostPanelOpen(false)}
-                result={ghostTraceResult}
-                isLoading={ghostTraceLoading}
-                nodes={nodes.map((node) => ({
-                  id: String(node.id),
-                  data: {
-                    label: (node.data as { label?: string } | undefined)?.label,
-                  },
-                }))}
-              />
-            )}
-          </AnimatePresence>
-
-          <BreachRoomPanel
-            isOpen={breachPanelOpen}
-            onClose={() => setBreachPanelOpen(false)}
-            result={breachRoomResult}
-            isLoading={breachRoomLoading}
-            nodes={nodes}
-            timeline={incidentTimeline}
-            currentReplayTick={replayTick}
-            onTickChange={(tick) => setReplayTick(tick)}
-            totalTicks={Math.max((incidentTimeline?.events.length ?? 1) - 1, 0)}
-          />
 
         </div>
 
@@ -1616,34 +2107,97 @@ export default function WorkspacePage() {
               </div>
 
               <div className="space-y-5">
-                 {/* Runtime Params */}
-                  <div className="space-y-4">
-                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">Runtime Vectors</div>
-                    {(['processingPower', 'coldStartLatency', 'failureRate'].map((field) => (
-                       <div key={field} className="space-y-2">
-                          <label className="text-[11px] text-zinc-500 font-medium px-1">{field}</label>
-                          <input
-                            type="text"
-                            defaultValue={field === 'failureRate' ? '0.01%' : '200ms'}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
-                          />
-                       </div>
-                    )))}
+                 {/*
+                   The two fields that decide the answer.
+
+                   Both already existed end to end -- in the graph types, in the
+                   simulation bridge and in the Rust engine -- with no way for a
+                   user to set either by hand. Only a repository import could
+                   fill them in, so a hand-drawn diagram was always analysed as
+                   if every component were a single instance serving an
+                   arbitrary reference load.
+                 */}
+                 <div className="space-y-4">
+                   <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">
+                     Capacity
+                   </div>
+
+                   <div className="space-y-2">
+                     <label className="text-[11px] text-zinc-400 font-medium px-1 flex items-center justify-between">
+                       <span>Instances</span>
+                       <span className="text-zinc-600 font-mono">
+                         {Number((selectedNode.data as { replicas?: number }).replicas ?? 1)}
+                       </span>
+                     </label>
+                     <input
+                       type="number"
+                       min={1}
+                       max={500}
+                       value={Number((selectedNode.data as { replicas?: number }).replicas ?? 1)}
+                       onChange={(e) => {
+                         const parsed = Math.max(1, Math.min(500, Math.round(Number(e.target.value) || 1)));
+                         updateNodeData(selectedNode.id, { replicas: parsed });
+                       }}
+                       className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
+                     />
+                     <p className="text-[10px] text-zinc-600 leading-relaxed px-1">
+                       One instance is a single point of failure; a replicated tier is not.
+                       Changes both the SPOF findings and the simulated capacity.
+                     </p>
+                   </div>
+
+                   <div className="space-y-2">
+                     <label className="text-[11px] text-zinc-400 font-medium px-1">Expected peak RPS</label>
+                     <input
+                       type="number"
+                       min={0}
+                       step={100}
+                       placeholder="unset - a reference load is used"
+                       value={
+                         (selectedNode.data as { expectedPeakRps?: number }).expectedPeakRps ?? ''
+                       }
+                       onChange={(e) => {
+                         const raw = e.target.value.trim();
+                         updateNodeData(selectedNode.id, {
+                           expectedPeakRps: raw === '' ? undefined : Math.max(0, Math.round(Number(raw) || 0)),
+                         });
+                       }}
+                       className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono placeholder:text-zinc-700 placeholder:text-xs"
+                     />
+                     <p className="text-[10px] text-zinc-600 leading-relaxed px-1">
+                       Only meaningful on an entry point. Turns &quot;saturates at 900 rps&quot;
+                       into &quot;saturates below your stated peak&quot;.
+                     </p>
+                   </div>
                  </div>
 
-                 {/* Network Params */}
-                  <div className="space-y-4">
-                    <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">Network Latency</div>
-                    {(['latency', 'jitter', 'bandwidthLimit'].map((field) => (
-                       <div key={field} className="space-y-2">
-                          <label className="text-[11px] text-zinc-500 font-medium px-1">{field}</label>
-                          <input
-                            type="text"
-                            defaultValue={field === 'bandwidthLimit' ? '1Gbps' : '20ms'}
-                            className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
-                          />
-                       </div>
-                    )))}
+                 {/* Runtime params -- these feed the engine per-node model. */}
+                 <div className="space-y-4">
+                   <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 pb-2 mb-1">
+                     Runtime Vectors
+                   </div>
+                   {([
+                     { key: 'processingPowerMs', label: 'processing time (ms)', fallback: 200, step: 10 },
+                     { key: 'coldStartLatencyMs', label: 'cold start (ms)', fallback: 0, step: 10 },
+                     { key: 'failureRatePercent', label: 'failure rate (%)', fallback: 0.01, step: 0.01 },
+                   ] as const).map((field) => (
+                     <div key={field.key} className="space-y-2">
+                       <label className="text-[11px] text-zinc-500 font-medium px-1">{field.label}</label>
+                       <input
+                         type="number"
+                         min={0}
+                         step={field.step}
+                         value={
+                           (selectedNode.data as Record<string, number | undefined>)[field.key]
+                             ?? field.fallback
+                         }
+                         onChange={(e) => updateNodeData(selectedNode.id, {
+                           [field.key]: Math.max(0, Number(e.target.value) || 0),
+                         })}
+                         className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-blue-500/40 transition-all font-mono"
+                       />
+                     </div>
+                   ))}
                  </div>
 
                  <div className="space-y-3 mt-6">
@@ -1764,58 +2318,19 @@ export default function WorkspacePage() {
         onImport={handleImportDiagram}
       />
 
-      <BreachRoomImportModal
-        isOpen={importModalOpen}
-        onClose={() => setImportModalOpen(false)}
-        onImport={(timeline) => {
-          void runBreachRoomAnalysis(timeline);
-        }}
+      <ImportRepoPopup
+        isOpen={isRepoImportOpen}
+        onClose={() => setIsRepoImportOpen(false)}
+        onImport={(nodes, edges) => handleImportDiagram(nodes, edges, 'repository')}
       />
 
       <ReportView
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
         projectName={projectName}
-        reportData={simulationResult ? {
-          simulationId: simulationResult.universeSeed || 'N/A',
-          universeSeed: simulationResult.universeSeed || 'N/A',
-          stableHash: simulationResult.graphHash || 'N/A',
-          grade: simulationResult.grade || 'F',
-          gradeScore: simulationResult.gradeScore ?? 0,
-          gradeRationale: simulationResult.gradeRationale || [],
-          gradeColor: simulationResult.grade === 'A' ? '#10b981' : simulationResult.grade?.startsWith('B') ? '#3B82F6' : '#ef4444',
-          status: simulationResult.status || 'UNKNOWN',
-          statusColor: simulationResult.status?.includes('PASS') ? '#10b981' : '#ef4444',
-          totalRequests: simulationResult.totalRequests || 0,
-          failedRequests: simulationResult.totalFailures || 0,
-          peakLatency: simulationResult.peakLatency || 0,
-          collapseTime: simulationResult.collapseTime || '—',
-          rootCause: {
-            summary: simulationResult.rootCause?.summary || 'Simulation completed.',
-            details: simulationResult.rootCause?.details || [],
-          },
-          recommendations: simulationResult.recommendations || [],
-          latencyData: simulationResult.latencyData || [],
-          groqReview: simulationResult.groqReview || '',
-        } : {
-          simulationId: '847293',
-          universeSeed: '783492',
-          stableHash: 'a7c4f9d2e8b3f1a588b2c45...',
-          grade: 'B+',
-          gradeScore: 82,
-          gradeRationale: ['Score breakdown — Availability: 35/35, Latency: 11/20, Fault Tolerance: 20/25, Scalability: 8/10, Operations: 8/10'],
-          gradeColor: '#3B82F6',
-          status: 'STABLE — PASS',
-          statusColor: '#3B82F6',
-          totalRequests: 10000,
-          failedRequests: 142,
-          peakLatency: 323,
-          collapseTime: '—',
-          rootCause: { summary: 'Run a simulation to see results.', details: [] },
-          recommendations: ['Run a simulation to see real recommendations.'],
-          latencyData: [],
-          groqReview: '',
-        }}
+        reportData={simulationResult}
+        onApplyChange={handleApplyChange}
+        applyingRecommendationId={applyingRecommendationId}
       />
       
       <style>{`

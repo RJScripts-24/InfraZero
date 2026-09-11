@@ -1,0 +1,125 @@
+{
+  "model": "InfraZero intervention-effect model -- shared encoder, sign + magnitude heads",
+  "task": "predict the direction and size of one architectural change",
+  "data_source": "matched pairs from Alibaba cluster-trace-microservices v2021 + v2022",
+  "test_set_size": 9571,
+  "protocol": "split by before-topology signature; no base architecture spans two splits",
+  "dead_band_log": 0.1,
+  "headline": {
+    "direction_accuracy": 0.58437,
+    "confidence_interval_95": [
+      0.5745,
+      0.59424
+    ],
+    "coin_flip_baseline": 0.5,
+    "majority_baseline": 0.5991,
+    "beats_coin_flip": true,
+    "beats_majority_baseline": false
+  },
+  "three_class": {
+    "sign_accuracy": 0.44844,
+    "classes": [
+      "helps",
+      "no clear effect",
+      "hurts"
+    ]
+  },
+  "magnitude": {
+    "rmse_log": 1.07907,
+    "mae_log": 0.64499,
+    "correlation_with_measured": 0.20302
+  },
+  "per_intervention": {
+    "cache": {
+      "n": 4163,
+      "direction_accuracy": 0.55849,
+      "confidence_interval_95": [
+        0.54341,
+        0.57358
+      ],
+      "majority_baseline": 0.5717,
+      "beats_majority": false
+    },
+    "service": {
+      "n": 3699,
+      "direction_accuracy": 0.6199,
+      "confidence_interval_95": [
+        0.60425,
+        0.63554
+      ],
+      "majority_baseline": 0.62612,
+      "beats_majority": false
+    },
+    "database": {
+      "n": 833,
+      "direction_accuracy": 0.55822,
+      "confidence_interval_95": [
+        0.5245,
+        0.59195
+      ],
+      "majority_baseline": 0.59304,
+      "beats_majority": false
+    },
+    "queue": {
+      "n": 711,
+      "direction_accuracy": 0.59916,
+      "confidence_interval_95": [
+        0.56313,
+        0.63518
+      ],
+      "majority_baseline": 0.64416,
+      "beats_majority": false
+    },
+    "gateway": {
+      "n": 165,
+      "direction_accuracy": 0.50909,
+      "confidence_interval_95": [
+        0.43281,
+        0.58537
+      ],
+      "majority_baseline": 0.52121,
+      "beats_majority": false
+    }
+  },
+  "context_sensitivity": {
+    "cache": {
+      "n": 4163,
+      "mean_p_helps": 0.36806,
+      "std_p_helps": 0.13892,
+      "p10": 0.20544,
+      "p90": 0.55279
+    },
+    "service": {
+      "n": 3699,
+      "mean_p_helps": 0.31836,
+      "std_p_helps": 0.12469,
+      "p10": 0.18357,
+      "p90": 0.48829
+    },
+    "database": {
+      "n": 833,
+      "mean_p_helps": 0.34413,
+      "std_p_helps": 0.11406,
+      "p10": 0.21,
+      "p90": 0.51379
+    },
+    "queue": {
+      "n": 711,
+      "mean_p_helps": 0.30491,
+      "std_p_helps": 0.16747,
+      "p10": 0.11287,
+      "p90": 0.56698
+    },
+    "gateway": {
+      "n": 165,
+      "mean_p_helps": 0.38556,
+      "std_p_helps": 0.09457,
+      "p10": 0.27308,
+      "p90": 0.48803
+    }
+  },
+  "training_checkpoint": {
+    "epoch": 8,
+    "warm_started": true
+  }
+}

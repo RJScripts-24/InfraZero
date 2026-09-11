@@ -754,6 +754,7 @@ mod tests {
             jitter_ms: jitter,
             packet_loss: loss,
             bandwidth_limit_mbps: bw,
+            call_kind: None,
         }
     }
 

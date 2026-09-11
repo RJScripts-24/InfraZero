@@ -4,19 +4,22 @@
     "description": "InfraZero Backend — AI-powered distributed system architecture generator with real-time collaboration",
     "main": "dist/index.js",
     "scripts": {
-        "dev": "npx ts-node src/index.ts",
+        "dev": "ts-node src/index.ts",
         "build": "tsc",
         "start": "node dist/index.js",
         "lint": "eslint src/**/*.ts",
-        "lint:fix": "eslint src/**/*.ts --fix"
+        "lint:fix": "eslint src/**/*.ts --fix",
+        "db:migrate": "ts-node src/scripts/migrate.ts"
     },
     "dependencies": {
+        "@types/js-yaml": "^4.0.9",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "express": "^4.21.0",
         "express-rate-limit": "^7.4.1",
         "groq-sdk": "^0.7.0",
         "helmet": "^8.0.0",
+        "js-yaml": "^5.4.1",
         "pg": "^8.16.3",
         "ws": "^8.18.0"
     },

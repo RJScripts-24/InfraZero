@@ -1,10 +1,21 @@
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Github, UserCircle, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { authFetch, saveSession } from '../../lib/auth';
+
+// GitHub sign-in is only offered when a real client id is configured. The
+// placeholder that ships in .env.example would send the user to a GitHub error
+// page, so the button is hidden rather than shown broken.
+const GITHUB_CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID;
+const GITHUB_ENABLED = Boolean(
+  GITHUB_CLIENT_ID && !/^(your_|<|\s*$)/i.test(String(GITHUB_CLIENT_ID)),
+);
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   return (
     <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ 
@@ -59,6 +70,7 @@ export default function AuthPage() {
 
             {/* OAuth Buttons */}
             <div className="space-y-4 mb-10">
+              {GITHUB_ENABLED && (
               <motion.button
                 whileHover={{ y: -2, scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
@@ -70,9 +82,8 @@ export default function AuthPage() {
                   fontSize: '16px'
                 }}
                 onClick={() => {
-                  const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID;
                   const redirectUri = `${window.location.origin}/auth/github/callback`;
-                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user:email`;
+                  window.location.href = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user:email`;
                 }}
               >
                 {/* SVG Border Animation Effect */}
@@ -84,6 +95,7 @@ export default function AuthPage() {
                 <Github size={20} />
                 Continue with GitHub
               </motion.button>
+              )}
 
               <motion.button
                 whileHover={{ y: -2, scale: 1.01, backgroundColor: 'rgba(255,255,255,0.05)' }}
@@ -96,31 +108,47 @@ export default function AuthPage() {
                   fontSize: '16px'
                 }}
                 onClick={() => {
+                  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+                  if (!clientId) {
+                    toast.error('Google sign-in is not configured. Set VITE_GOOGLE_CLIENT_ID.');
+                    return;
+                  }
+                  // @ts-ignore - loaded from Google's script tag in index.html
+                  if (typeof google === 'undefined') {
+                    toast.error('Google sign-in could not load. Check your connection and retry.');
+                    return;
+                  }
+
                   // @ts-ignore
                   google.accounts.id.initialize({
-                    client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+                    client_id: clientId,
                     callback: async (response: any) => {
+                      setIsAuthenticating(true);
                       try {
                         const res = await authFetch('/api/auth/google', {
                           method: 'POST',
                           body: JSON.stringify({ token: response.credential }),
                         });
+                        const body = await res.json().catch(() => ({}));
                         if (!res.ok) {
-                          throw new Error(`Google login failed: ${res.status}`);
+                          throw new Error(body?.error || `Google sign-in failed (${res.status})`);
                         }
-                        const data = await res.json();
-                        if (data.token) {
-                          saveSession(data.token, data.user);
-                          navigate('/dashboard');
+                        if (!body.token) {
+                          throw new Error('Google sign-in did not return a session.');
                         }
+                        saveSession(body.token, body.user);
+                        navigate('/dashboard');
                       } catch (err) {
-                        console.error('Google login failed', err);
+                        toast.error(err instanceof Error ? err.message : 'Google sign-in failed.');
+                      } finally {
+                        setIsAuthenticating(false);
                       }
                     },
                   });
                   // @ts-ignore
                   google.accounts.id.prompt();
                 }}
+                disabled={isAuthenticating}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M19.6 10.227c0-.709-.064-1.39-.182-2.045H10v3.868h5.382a4.6 4.6 0 01-1.996 3.018v2.51h3.232c1.891-1.742 2.982-4.305 2.982-7.35z" fill="#4285F4"/>
@@ -153,7 +181,7 @@ export default function AuthPage() {
                 style={{ fontSize: '15px' }}
               >
                 <UserCircle size={20} />
-                Explore as Guest
+                Explore the canvas as a guest
               </motion.button>
             </div>
 
@@ -161,9 +189,10 @@ export default function AuthPage() {
             <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-4">
               <Zap className="w-5 h-5 text-blue-500 shrink-0" fill="currentColor" />
               <div>
-                <div className="text-blue-400 font-bold text-[11px] tracking-wider uppercase mb-1">Local-First Privacy</div>
+                <div className="text-blue-400 font-bold text-[11px] tracking-wider uppercase mb-1">Why sign in</div>
                 <div className="text-zinc-500 text-[13px] leading-relaxed">
-                  Authentication is only for cloud sync. Architecture data is stored locally in your browser.
+                  An account is what lets your projects, simulations and reports be saved and shared.
+                  Guest sessions stay in this browser and are not kept.
                 </div>
               </div>
             </div>

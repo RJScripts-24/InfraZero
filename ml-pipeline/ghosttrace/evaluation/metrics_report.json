@@ -1,52 +1,99 @@
 {
-  "model": "GhostTrace GATv2 (2-layer, 2-head attention)",
-  "dataset_size": 28,
-  "num_classes": 2,
-  "classes": [
-    "stable",
-    "unstable"
-  ],
+  "model": "GhostTrace architecture grader -- 3-layer GINEConv GNN (edge-aware)",
+  "task": "3-class microservice architecture risk grading (low / medium / high)",
+  "data_source": "Alibaba cluster-trace-microservices v2021 + v2022",
+  "test_set_size": 6301,
   "overall": {
-    "accuracy": 0.8571428571428571,
-    "macro_precision": 0.8512820512820514,
-    "macro_recall": 0.8663101604278074,
-    "macro_f1": 0.8541666666666667,
-    "weighted_f1": 0.8586309523809524,
-    "macro_roc_auc": 0.8663101604278075,
-    "macro_avg_precision": 0.8693431568431569
+    "accuracy": 0.7229,
+    "balanced_accuracy": 0.72291,
+    "macro_precision": 0.72049,
+    "macro_recall": 0.72291,
+    "macro_f1": 0.72063,
+    "weighted_f1": 0.72061,
+    "macro_roc_auc_ovr": 0.88939,
+    "macro_average_precision": 0.80274,
+    "cohen_kappa": 0.58434,
+    "quadratic_weighted_kappa": 0.72758,
+    "matthews_corrcoef": 0.58523,
+    "adjacent_accuracy": 0.96937,
+    "expected_calibration_error": 0.03573
   },
   "per_class": {
-    "stable": {
-      "precision": 0.7692307692307693,
-      "recall": 0.9090909090909091,
-      "f1": 0.8333333333333334,
-      "support": 11,
-      "roc_auc": 0.8663101604278075,
-      "avg_precision": 0.8405289155289155
+    "low": {
+      "precision": 0.75719,
+      "recall": 0.83968,
+      "f1": 0.7963,
+      "support": 2102,
+      "roc_auc": 0.93518,
+      "average_precision": 0.88203
     },
-    "unstable": {
-      "precision": 0.9333333333333333,
-      "recall": 0.8235294117647058,
-      "f1": 0.875,
-      "support": 17,
-      "roc_auc": 0.8663101604278075,
-      "avg_precision": 0.8981573981573981
+    "medium": {
+      "precision": 0.63969,
+      "recall": 0.598,
+      "f1": 0.61815,
+      "support": 2102,
+      "roc_auc": 0.82381,
+      "average_precision": 0.67198
+    },
+    "high": {
+      "precision": 0.76459,
+      "recall": 0.73104,
+      "f1": 0.74744,
+      "support": 2097,
+      "roc_auc": 0.90916,
+      "average_precision": 0.85423
     }
   },
   "confusion_matrix": [
     [
-      10,
-      1
+      1765,
+      252,
+      85
     ],
     [
-      3,
-      14
+      458,
+      1257,
+      387
+    ],
+    [
+      108,
+      456,
+      1533
     ]
   ],
-  "research_summary": {
-    "main_result": "The GhostTrace GNN achieved 85.7% accuracy on the held-out validation set.",
-    "roc_statement": "Macro-average AUC-ROC of 0.866 indicates robust discriminative performance across failure modes.",
-    "baseline_comparison": "Outperforms random baseline (50%) by 35.7% absolute accuracy.",
-    "per_class_summary": "Best class: unstable (87.5% F1). Most challenging: stable (83.3% F1)."
-  }
+  "confusion_matrix_labels": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "fit_diagnostics": {
+    "train_accuracy": 0.79289,
+    "validation_accuracy": 0.7254,
+    "test_accuracy": 0.7229,
+    "train_minus_test": 0.06999,
+    "verdict": "well fitted: train and test accuracy agree within 10 points"
+  },
+  "baselines": {
+    "random": 0.33333,
+    "majority_class": 0.3336,
+    "gradient_boosting_on_graph_summary": {
+      "accuracy": 0.66561,
+      "macro_f1": 0.66316,
+      "note": "Hand-crafted whole-graph summary only, no message passing. The GNN has to beat this for the graph layers to be justified."
+    }
+  },
+  "cross_validation": null,
+  "hyperparameters": {
+    "epochs": 120,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "dropout": 0.25,
+    "patience": 25,
+    "hidden_dim": 96,
+    "num_layers": 3,
+    "init_encoder": true
+  },
+  "label_definition": "Tercile of measured p99 end-to-end response time, pooled across every production trace realising the same topology. Response time is never a model input -- the network sees only structure and node roles.",
+  "protocol": "Stratified 70/15/15 split over distinct topologies. Validation drove early stopping; the test split was read once, here. No topology appears in more than one split."
 }

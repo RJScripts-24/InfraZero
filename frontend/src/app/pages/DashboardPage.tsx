@@ -1,8 +1,10 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, useEffect, useRef } from 'react';
-import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check, LayoutGrid, Users, BookMarked, Settings2, Zap } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Play, FileText, MoreVertical, Plus, Share2, Trash2, Check, LayoutGrid, Users, Settings2, Zap, Pencil, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { authFetch, getUser, isTemporaryGuest } from '../../lib/auth';
+import { getUser, isTemporaryGuest } from '../../lib/auth';
+import * as api from '../../lib/api';
+import { toast } from 'sonner';
 
 // ── Premium graph thumbnail variants ─────────────────────────────────
 // Per-variant stroke opacity multipliers — subtle blue variations
@@ -90,25 +92,74 @@ const GraphThumbnail = ({ variant, failed }: { variant: number; failed?: boolean
 };
 
 type DashboardProject = {
-  id: number;
+  id: string;
   title: string;
   status: string;
   statusColor: string;
   lastEdited: string;
   isCollaborative: boolean;
-  grade?: string;
+  grade?: string | null;
   isDraft?: boolean;
   isFailed?: boolean;
 };
+
+/** "3 minutes ago" reads better on a card than a raw ISO timestamp. */
+const relativeTime = (iso: string): string => {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return 'Recently';
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return 'Just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(then).toLocaleDateString();
+};
+
+const toDashboardProject = (project: api.ProjectListItem): DashboardProject => ({
+  id: project.id,
+  title: project.title,
+  status:
+    project.status === 'Draft'
+      ? 'Draft'
+      : project.status === 'Failure'
+        ? 'Simulation Failed'
+        // A project with no stored letter has genuinely not been graded: the
+        // model withheld it, or could not be reached. Inventing a B here was a
+        // guess presented as a result.
+        : project.grade
+          ? `Graded: ${project.grade}`
+          : 'Grade withheld',
+  statusColor: project.statusColor,
+  lastEdited: relativeTime(project.lastEdited),
+  isCollaborative: project.isCollaborative,
+  grade: project.grade,
+  isDraft: project.status === 'Draft',
+  isFailed: project.status === 'Failure',
+});
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const currentUser = getUser();
   const [inviteLink, setInviteLink] = useState('');
   const [activeNav, setActiveNav] = useState('My Projects');
-  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DashboardProject | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [renaming, setRenaming] = useState<DashboardProject | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const guest = isTemporaryGuest();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -121,118 +172,148 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fallback local project data if backend is unavailable
-  const [projects, setProjects] = useState<DashboardProject[]>([
-    {
-      id: 1,
-      title: 'Velocis',
-      status: 'Graded: A-',
-      statusColor: '#3B82F6',
-      lastEdited: '2 mins ago by User B',
-      isCollaborative: true,
-      grade: 'A-'
-    },
-    {
-      id: 2,
-      title: 'InfraZero Core',
-      status: 'Draft',
-      statusColor: '#A1A1AA',
-      lastEdited: '1 hour ago',
-      isCollaborative: false,
-      isDraft: true
-    },
-    {
-      id: 3,
-      title: 'Edge-Compute-Sim',
-      status: 'Graded: B-',
-      statusColor: '#3B82F6',
-      lastEdited: '3 days ago by User A',
-      isCollaborative: true,
-      grade: 'B-'
-    },
-    {
-      id: 4,
-      title: 'Netflix-Clone-Arch',
-      status: 'Simulation Failed',
-      statusColor: '#EF4444',
-      lastEdited: '5 days ago',
-      isCollaborative: false,
-      isFailed: true
-    },
-    {
-      id: 5,
-      title: 'Kafka-Streams-Test',
-      status: 'Draft',
-      statusColor: '#A1A1AA',
-      lastEdited: '1 week ago',
-      isCollaborative: false,
-      isDraft: true
-    },
-    {
-      id: 6,
-      title: 'Redis-Cluster-Lab',
-      status: 'Graded: B+',
-      statusColor: '#3B82F6',
-      lastEdited: '2 weeks ago by User C',
-      isCollaborative: true,
-      grade: 'B+'
+  const refreshProjects = useCallback(async () => {
+    if (guest) {
+      setProjects([]);
+      setIsLoading(false);
+      return;
     }
-  ]);
+    try {
+      const data = await api.listProjects();
+      setProjects(data.map(toDashboardProject));
+      setLoadError(null);
+    } catch (err) {
+      // Surfaced in the grid rather than silently falling back to fake rows -
+      // showing invented projects when the backend is down is worse than an error.
+      setLoadError(err instanceof Error ? err.message : 'Could not load projects.');
+      setProjects([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [guest]);
 
   useEffect(() => {
-    if (isTemporaryGuest()) {
+    void refreshProjects();
+  }, [refreshProjects]);
+
+  /**
+   * True while a create request is in flight.
+   *
+   * Creation can be triggered two ways, Enter in the name field and the Create
+   * button, and the dialog stayed open until the request came back. Two
+   * triggers a few hundred milliseconds apart therefore posted twice and made
+   * two projects with the same name: the navigation followed the first, so one
+   * row collected the graph and the grade while the other sat empty on the
+   * dashboard forever. A ref, not state, because the second trigger can arrive
+   * before React has re-rendered.
+   */
+  const isCreatingProjectRef = useRef(false);
+  const [isSubmittingProject, setIsSubmittingProject] = useState(false);
+
+  const handleCreateProject = async () => {
+    const title = newProjectName.trim();
+    if (!title || isCreatingProjectRef.current) return;
+
+    isCreatingProjectRef.current = true;
+    setIsSubmittingProject(true);
+    try {
+      const created = await api.createProject(title);
+      setIsCreating(false);
+      setNewProjectName('');
+      toast.success(`Created "${created.title}"`);
+      navigate(`/workspace?project=${created.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create the project.');
+    } finally {
+      isCreatingProjectRef.current = false;
+      setIsSubmittingProject(false);
+    }
+  };
+
+  const handleRename = async () => {
+    if (!renaming) return;
+    const title = renameValue.trim();
+    if (!title || title === renaming.title) {
+      setRenaming(null);
       return;
     }
 
-    authFetch('/api/projects', { method: 'GET' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Failed to fetch projects: ${res.status}`))))
-      .then((data) => {
-        if (!Array.isArray(data)) return;
-        const mapped: DashboardProject[] = data.map((project: any, index: number) => {
-          const parsedId = Number(project.id);
-          return {
-          id: Number.isFinite(parsedId) ? parsedId : index + 1,
-          title: project.title || 'Untitled Project',
-          status:
-            project.status === 'Draft'
-              ? 'Draft'
-              : project.status === 'Failure'
-              ? 'Simulation Failed'
-              : `Graded: ${project.grade || 'B'}`,
-          statusColor: project.statusColor || (project.status === 'Failure' ? '#EF4444' : project.status === 'Draft' ? '#A1A1AA' : '#3B82F6'),
-          lastEdited: project.lastEdited || 'Recently',
-          isCollaborative: Boolean(project.isCollaborative),
-          grade: project.grade || undefined,
-          isDraft: project.status === 'Draft',
-          isFailed: project.status === 'Failure',
-        };
-        });
-        setProjects(mapped);
-      })
-      .catch((err) => {
-        console.error('[Dashboard] Failed to load projects, showing fallback data.', err);
-      });
-  }, []);
-
-  const handleShare = (e: React.MouseEvent, projectId: number, projectTitle: string) => {
-    e.stopPropagation();
-    const mockLink = `https://infrazero.dev/invite/${projectTitle.toLowerCase().replace(/\s+/g, '-')}-${projectId}`;
-    navigator.clipboard.writeText(mockLink).catch(() => {});
-    setCopiedId(projectId);
-    setTimeout(() => setCopiedId(null), 2000);
-    setOpenMenuId(null);
+    setBusyId(renaming.id);
+    try {
+      await api.renameProject(renaming.id, title);
+      setRenaming(null);
+      toast.success('Project renamed.');
+      await refreshProjects();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not rename the project.');
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleDelete = (e: React.MouseEvent, projectId: number) => {
+  const handleShare = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
-    setProjects(prev => prev.filter(p => p.id !== projectId));
-    setOpenMenuId(null);
+    setBusyId(projectId);
+    try {
+      const { inviteLink: link } = await api.createInviteLink(projectId);
+      await navigator.clipboard.writeText(link).catch(() => undefined);
+      setCopiedId(projectId);
+      setTimeout(() => setCopiedId(null), 2500);
+      toast.success('Invite link copied. Anyone with this link can edit live.');
+      await refreshProjects();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not create an invite link.');
+    } finally {
+      setBusyId(null);
+      setOpenMenuId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setBusyId(target.id);
+    try {
+      await api.deleteProject(target.id);
+      setPendingDelete(null);
+      setProjects((prev) => prev.filter((p) => p.id !== target.id));
+      toast.success(`Deleted "${target.title}"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete the project.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /**
+   * Accepts either a full invite URL or the bare token, since people paste both.
+   */
+  const handleJoinSession = async () => {
+    const raw = inviteLink.trim();
+    if (!raw) return;
+
+    let token = raw;
+    try {
+      const parsed = new URL(raw);
+      token = parsed.searchParams.get('invite') || parsed.pathname.split('/').filter(Boolean).pop() || raw;
+    } catch {
+      // Not a URL - treat the input as the token itself.
+    }
+
+    setIsJoining(true);
+    try {
+      const invite = await api.resolveInvite(token);
+      toast.success(`Joining "${invite.title}"`);
+      navigate(`/workspace?invite=${encodeURIComponent(token)}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'That invite link is not valid.');
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   const navItems = [
     { label: 'My Projects',    icon: LayoutGrid },
-    { label: 'Shared with Me', icon: Users },
-    { label: 'Library of Doom',icon: BookMarked },
     { label: 'Settings',       icon: Settings2 },
   ];
 
@@ -298,7 +379,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-white text-[14px] font-medium truncate">{currentUser?.name || 'Guest User'}</div>
-                <div className="text-zinc-500 text-[11px] font-mono tracking-wider uppercase">Research Tier</div>
+                <div className="text-zinc-500 text-[11px] truncate">{currentUser?.email || ''}</div>
               </div>
             </div>
           </div>
@@ -327,22 +408,6 @@ export default function DashboardPage() {
             })}
           </nav>
 
-          {/* System Status Block */}
-          <div className="px-6 py-6 border-t border-white/5">
-            <div className="text-zinc-600 font-mono text-[10px] tracking-[0.2em] uppercase mb-4 font-bold">Systems</div>
-            <div className="space-y-3 font-mono text-[11px]">
-              {[
-                { label: 'CRDT',        value: 'SYNCED', color: '#3B82F6' },
-                { label: 'WASM',        value: 'READY',  color: '#3B82F6' },
-                { label: 'LOCAL',       value: 'ACTIVE', color: '#3B82F6' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between">
-                  <span className="text-zinc-500">{label}</span>
-                  <span style={{ color }}>{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </motion.aside>
 
@@ -369,8 +434,9 @@ export default function DashboardPage() {
             <motion.button
               whileHover={{ y: -2, scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => navigate('/workspace')}
-              className="iz-btn-blue relative overflow-hidden text-white font-bold py-3.5 px-8 rounded-xl flex items-center gap-3 transition-all shadow-[0_20px_40px_-10px_rgba(59,130,246,0.3)]"
+              onClick={() => { setNewProjectName(''); setIsCreating(true); }}
+              disabled={guest}
+              className="iz-btn-blue relative overflow-hidden text-white font-bold py-3.5 px-8 rounded-xl flex items-center gap-3 transition-all shadow-[0_20px_40px_-10px_rgba(59,130,246,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {/* SVG Border Animation */}
               <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
@@ -397,7 +463,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <h2 className="text-white text-xl font-bold mb-1">Join Live Session</h2>
-                <p className="text-zinc-400">Collaboration made deterministic. Paste an invite link below.</p>
+                <p className="text-zinc-400">Paste an invite link to edit the architecture live with its owner.</p>
               </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
@@ -405,26 +471,62 @@ export default function DashboardPage() {
                 type="text"
                 value={inviteLink}
                 onChange={(e) => setInviteLink(e.target.value)}
-                placeholder="https://infrazero.dev/invite/..."
+                placeholder="Paste an invite link or token"
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleJoinSession(); }}
                 className="flex-1 bg-black/40 border border-white/10 rounded-xl px-5 py-3 text-white font-mono text-sm focus:outline-none focus:border-blue-500/50 transition-all"
               />
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="iz-btn-blue relative overflow-hidden py-3 px-10 rounded-xl text-white font-bold transition-all"
+                onClick={() => void handleJoinSession()}
+                disabled={isJoining || !inviteLink.trim()}
+                className="iz-btn-blue relative overflow-hidden py-3 px-10 rounded-xl text-white font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {/* SVG Border Animation */}
                 <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
                 <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
                 <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
                 <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-                Join
+                {isJoining ? 'Joining...' : 'Join'}
               </motion.button>
             </div>
           </motion.div>
 
           {/* ── Project Grid ── */}
-          {projects.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center gap-3 py-32 text-zinc-500">
+              <Loader2 size={20} className="animate-spin text-blue-500" />
+              <span className="text-sm font-medium">Loading your projects...</span>
+            </div>
+          ) : loadError ? (
+            <div className="py-24 text-center">
+              <div className="inline-block px-8 py-6 rounded-2xl border border-red-500/20 bg-red-500/5">
+                <p className="text-red-400 font-bold mb-2">Could not load your projects</p>
+                <p className="text-zinc-500 text-sm mb-5 max-w-md">{loadError}</p>
+                <button
+                  onClick={() => { setIsLoading(true); void refreshProjects(); }}
+                  className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-bold hover:bg-white/10 transition-all"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          ) : guest ? (
+            <div className="py-24 text-center">
+              <div className="inline-block px-8 py-6 rounded-2xl border border-white/10 bg-zinc-900/40">
+                <p className="text-white font-bold mb-2">You are exploring as a guest</p>
+                <p className="text-zinc-500 text-sm mb-5 max-w-md">
+                  Guest sessions are not saved. Sign in to create projects, run simulations and keep your reports.
+                </p>
+                <button
+                  onClick={() => navigate('/auth')}
+                  className="px-6 py-2.5 rounded-xl bg-blue-500 text-white text-sm font-bold hover:bg-blue-600 transition-all"
+                >
+                  Sign in
+                </button>
+              </div>
+            </div>
+          ) : projects.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {projects.map((project, index) => {
                 const statusColor  = project.isFailed ? '#EF4444' : project.isDraft ? '#71717A' : '#3B82F6';
@@ -457,7 +559,13 @@ export default function DashboardPage() {
                       <div className="absolute bottom-3 left-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/10">
                         <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
                         <span className="text-[10px] font-mono font-bold tracking-widest text-white/80 uppercase">
-                          {project.isDraft ? 'Draft' : project.isFailed ? 'Failure' : `Grade ${project.grade}`}
+                          {project.isDraft
+                            ? 'Draft'
+                            : project.isFailed
+                              ? 'Failure'
+                              : project.grade
+                                ? `Grade ${project.grade}`
+                                : 'Ungraded'}
                         </span>
                       </div>
 
@@ -475,7 +583,10 @@ export default function DashboardPage() {
                     {/* Card Content */}
                     <div className="p-7">
                       <div className="flex items-start justify-between mb-2">
-                        <h3 className="text-white text-xl font-bold tracking-tight">
+                        <h3
+                          onClick={() => navigate(`/workspace?project=${project.id}`)}
+                          className="text-white text-xl font-bold tracking-tight cursor-pointer hover:text-blue-400 transition-colors"
+                        >
                           {project.title}
                         </h3>
                         {project.isCollaborative && (
@@ -493,11 +604,17 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="flex items-center gap-3">
-                         <button className="flex-1 py-2.5 px-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-bold hover:bg-blue-500/20 transition-all flex items-center justify-center gap-2">
+                         <button
+                            onClick={() => navigate(`/workspace?project=${project.id}&run=1`)}
+                            className="flex-1 py-2.5 px-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 text-sm font-bold hover:bg-blue-500/20 transition-all flex items-center justify-center gap-2">
                             <Play size={14} fill="currentColor" />
                             Run Sim
                          </button>
-                         <button className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white transition-all">
+                         <button
+                            title={project.isDraft ? 'Run a simulation first to generate a report' : 'Open the latest report'}
+                            onClick={() => navigate(`/workspace?project=${project.id}&report=1`)}
+                            disabled={project.isDraft}
+                            className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-zinc-400 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed">
                             <FileText size={16} />
                          </button>
                       </div>
@@ -516,11 +633,31 @@ export default function DashboardPage() {
                                 <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest mb-1">Project Actions</p>
                                 <h4 className="text-white font-bold">{project.title}</h4>
                               </div>
-                              <button onClick={(e) => handleShare(e, project.id, project.title)} className="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-medium hover:bg-white/10 transition-all flex items-center gap-3 justify-center">
-                                {copiedId === project.id ? <Check size={16} className="text-blue-400" /> : <Share2 size={16} />}
+                              <button
+                                onClick={(e) => void handleShare(e, project.id)}
+                                disabled={busyId === project.id}
+                                className="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-medium hover:bg-white/10 transition-all flex items-center gap-3 justify-center disabled:opacity-50">
+                                {busyId === project.id
+                                  ? <Loader2 size={16} className="animate-spin" />
+                                  : copiedId === project.id
+                                    ? <Check size={16} className="text-blue-400" />
+                                    : <Share2 size={16} />}
                                 {copiedId === project.id ? 'Invite Copied' : 'Share Project'}
                               </button>
-                              <button onClick={(e) => handleDelete(e, project.id)} className="w-full py-3 px-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-medium hover:bg-red-500/20 transition-all flex items-center gap-3 justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRenaming(project);
+                                  setRenameValue(project.title);
+                                  setOpenMenuId(null);
+                                }}
+                                className="w-full py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white text-sm font-medium hover:bg-white/10 transition-all flex items-center gap-3 justify-center">
+                                <Pencil size={16} />
+                                Rename Project
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setPendingDelete(project); setOpenMenuId(null); }}
+                                className="w-full py-3 px-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm font-medium hover:bg-red-500/20 transition-all flex items-center gap-3 justify-center">
                                 <Trash2 size={16} />
                                 Delete Project
                               </button>
@@ -549,10 +686,10 @@ export default function DashboardPage() {
                 No active architectures
               </h3>
               <p className="text-zinc-500 text-lg max-w-sm mx-auto mb-10 leading-relaxed">
-                Initialize your first distributed system and run a deterministic chaos simulation.
+                Create your first architecture, then run a simulation to grade it.
               </p>
               <button
-                onClick={() => navigate('/workspace')}
+                onClick={() => { setNewProjectName(''); setIsCreating(true); }}
                 className="iz-btn-blue relative overflow-hidden py-4 px-12 rounded-xl text-white font-bold"
               >
                 {/* SVG Border Animation */}
@@ -560,12 +697,115 @@ export default function DashboardPage() {
                 <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
                 <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
                 <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-                Initialize Lab
+                Create Project
               </button>
             </motion.div>
           )}
         </div>
       </main>
+
+      {/* ── Create / Rename / Delete dialogs ── */}
+      <AnimatePresence>
+        {(isCreating || renaming) && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              onClick={() => { setIsCreating(false); setRenaming(null); }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              className="relative w-full max-w-md p-8 rounded-[28px] border border-white/10 bg-zinc-900 shadow-2xl"
+            >
+              <h2 className="text-white text-2xl font-bold mb-2 tracking-tight">
+                {renaming ? 'Rename project' : 'New project'}
+              </h2>
+              <p className="text-zinc-500 text-sm mb-6">
+                {renaming
+                  ? 'Give this architecture a clearer name.'
+                  : 'Name your architecture. You can rename it at any time.'}
+              </p>
+
+              <input
+                autoFocus
+                value={renaming ? renameValue : newProjectName}
+                maxLength={120}
+                onChange={(e) => (renaming ? setRenameValue(e.target.value) : setNewProjectName(e.target.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void (renaming ? handleRename() : handleCreateProject());
+                  if (e.key === 'Escape') { setIsCreating(false); setRenaming(null); }
+                }}
+                placeholder="e.g. Payments Platform"
+                className="w-full px-5 py-3.5 bg-black/50 border border-white/10 rounded-xl text-white font-medium focus:outline-none focus:border-blue-500/60 transition-all placeholder:text-zinc-700 mb-6"
+              />
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setIsCreating(false); setRenaming(null); }}
+                  className="flex-1 py-3 rounded-xl border border-white/10 text-zinc-400 font-medium hover:text-white hover:bg-white/5 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => void (renaming ? handleRename() : handleCreateProject())}
+                  disabled={
+                    !(renaming ? renameValue.trim() : newProjectName.trim()) ||
+                    (!renaming && isSubmittingProject)
+                  }
+                  className="flex-1 py-3 rounded-xl bg-blue-500 text-white font-bold hover:bg-blue-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {renaming ? 'Save' : isSubmittingProject ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pendingDelete && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-6">
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              onClick={() => setPendingDelete(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              className="relative w-full max-w-md p-8 rounded-[28px] border border-red-500/25 bg-zinc-900 shadow-2xl text-center"
+            >
+              <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-5 text-red-500">
+                <Trash2 size={26} />
+              </div>
+              <h2 className="text-white text-2xl font-bold mb-3 tracking-tight">Delete project</h2>
+              <p className="text-zinc-400 text-sm mb-8 leading-relaxed">
+                <span className="text-white font-semibold">{pendingDelete.title}</span> and all of its
+                simulation reports will be permanently deleted. This cannot be undone.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => void handleDelete()}
+                  disabled={busyId === pendingDelete.id}
+                  className="w-full py-3.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {busyId === pendingDelete.id && <Loader2 size={16} className="animate-spin" />}
+                  Delete permanently
+                </button>
+                <button
+                  onClick={() => setPendingDelete(null)}
+                  className="w-full py-2.5 text-zinc-500 font-medium hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

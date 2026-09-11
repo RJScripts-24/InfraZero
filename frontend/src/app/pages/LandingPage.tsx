@@ -1,4 +1,4 @@
-import { Zap, Github, Menu, X, Terminal, Cpu, Database, Network, Twitter, Instagram, Mail, Star, Send } from 'lucide-react';
+import { Zap, Menu, X, Terminal, Cpu, Database, Network, Send } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
@@ -42,21 +42,6 @@ export default function LandingPage() {
             </div>
 
             <div className="hidden md:flex items-center justify-center" style={{ gap: 'clamp(32px, 2.8vw, 56px)' }}>
-              {['Platform', 'Documentation', 'Examples', 'Blog'].map((item) => (
-                <a key={item} href="#" className="uppercase tracking-wider transition-colors" 
-                  style={{ color: '#A1A1AA', fontSize: 'clamp(12px, 0.9vw, 16px)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#FFFFFF'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#A1A1AA'}>
-                  {item}
-                </a>
-              ))}
-              <a href="#" className="uppercase tracking-wider transition-colors flex items-center gap-1.5" 
-                style={{ color: '#A1A1AA', fontSize: 'clamp(12px, 0.9vw, 16px)' }}
-                onMouseEnter={(e) => e.currentTarget.style.color = '#FFFFFF'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#A1A1AA'}>
-                <Github style={{ width: 'clamp(14px, 1.1vw, 20px)', height: 'clamp(14px, 1.1vw, 20px)' }} />
-                GitHub
-              </a>
             </div>
 
             <div className={`hidden md:flex items-center gap-3 justify-end ${!isScrolled ? 'flex-1' : ''}`}>
@@ -88,12 +73,6 @@ export default function LandingPage() {
               transition={{ duration: 0.2, ease: 'linear' }} className="md:hidden py-6 border-t" 
               style={{ borderColor: 'rgba(59,130,246,0.1)' }}>
               <div className="flex flex-col gap-4">
-                {['Platform', 'Documentation', 'Examples', 'Blog'].map((item) => (
-                  <a key={item} href="#" className="text-sm uppercase tracking-wider py-2" style={{ color: '#A1A1AA' }}>{item}</a>
-                ))}
-                <a href="#" className="text-sm uppercase tracking-wider py-2 flex items-center gap-2" style={{ color: '#A1A1AA' }}>
-                  <Github className="w-4 h-4" />GitHub
-                </a>
                 <div className="flex flex-col gap-3 mt-4 pt-4 border-t" style={{ borderColor: 'rgba(59,130,246,0.1)' }}>
                   <button onClick={() => navigate('/auth')} className="px-5 py-3 text-sm uppercase tracking-wider border w-full" 
                     style={{ borderColor: 'rgba(59,130,246,0.3)', color: '#A1A1AA', borderRadius: '2px' }}>Try Demo</button>
@@ -165,7 +144,7 @@ export default function LandingPage() {
           transition={{ delay: 0.2, duration: 0.4, ease: 'linear' }} className="text-center relative z-10"
           style={{ color: '#D4D4D8', fontSize: 'clamp(18px, 1.4vw, 24px)', lineHeight: 1.6,
             marginBottom: 'clamp(48px, 4.5vw, 64px)', maxWidth: '800px', fontWeight: 400 }}>
-          AI agents that plan, assign, and track — autonomously. Collaborate seamlessly, real-time sync, zero deadline drift. Build together — frictionless.
+          Draw or import an architecture, simulate it under load, and get a graded report that names the single points of failure and the exact change to make. Edit it live with your team.
         </motion.p>
 
         {/* CTA Buttons */}
@@ -174,14 +153,6 @@ export default function LandingPage() {
           <button onClick={() => navigate('/auth')} className="transition-all rounded-full bg-blue-600 hover:bg-blue-500 font-semibold"
             style={{ color: '#FFFFFF', padding: 'clamp(14px, 1.2vw, 20px) clamp(28px, 2.5vw, 44px)', fontSize: 'clamp(15px, 1.2vw, 18px)' }}>
             Try the Demo
-          </button>
-          <button className="border transition-all flex items-center gap-3 rounded-full"
-            style={{ borderColor: 'rgba(59,130,246,0.4)', color: '#3B82F6', backgroundColor: 'transparent',
-              padding: 'clamp(14px, 1.2vw, 20px) clamp(28px, 2.5vw, 44px)', fontSize: 'clamp(15px, 1.2vw, 18px)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.1)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}>
-            <Github style={{ width: 'clamp(18px, 1.5vw, 26px)', height: 'clamp(18px, 1.5vw, 26px)' }} />
-            View on GitHub
           </button>
         </motion.div>
 
@@ -259,11 +230,12 @@ export default function LandingPage() {
               Text-to-Graph Architecture
             </h3>
             <p className="mb-4" style={{ color: '#A1A1AA', fontSize: 'clamp(16px, 1.35vw, 24px)', lineHeight: 1.6 }}>
-              Powered by Groq API running Llama 3 at 300+ tokens/second. Upload your system-design.pdf or paste requirements. 
-              Prompt: "Build a Netflix-like microservices backend" and watch AI insert load balancers, caching layers, and message queues in real-time.
+              Powered by Groq. Describe what you want &mdash; "Build a Netflix-like microservices backend" &mdash;
+              and the canvas fills in load balancers, caching layers and message queues. Or import a screenshot
+              of an existing architecture diagram and have it read back as an editable graph.
             </p>
             <p style={{ color: '#A1A1AA', opacity: 0.7, fontSize: 'clamp(14px, 1.1vw, 20px)', lineHeight: 1.6 }}>
-              Every node placement validated against distributed systems best practices. No hallucinations. Pure architectural reasoning.
+              Generated components are normalised onto the same component vocabulary the simulator and the grading model use.
             </p>
           </motion.div>
           {/* AI Canvas — animated graph building */}
@@ -420,7 +392,7 @@ export default function LandingPage() {
             <div className="p-8 pt-6 flex-1 flex flex-col">
               <h3 className="text-xl font-bold text-white mb-3">Deterministic WASM Physics</h3>
               <p className="text-zinc-500 text-sm leading-relaxed mb-8 flex-1">
-                Your graph compiles to a Rust struct, executing Monte Carlo simulations at 60fps in WebAssembly. Verify stability before deployment.
+                Your graph is handed to a Rust engine compiled to WebAssembly, which replays it as a tick-based Monte Carlo simulation. Same graph, same seed, same result.
               </p>
               {/* Transplanted Physics Visual */}
               <div className="border border-white/10 rounded-xl bg-black/50 p-4 font-mono text-xs relative overflow-hidden">
@@ -449,7 +421,7 @@ export default function LandingPage() {
             <div className="p-8 pt-6 flex-1 flex flex-col bg-gradient-to-b from-transparent to-[#052e16]/10">
               <h3 className="text-xl font-bold text-white mb-3">Peer-to-Peer Synchronization</h3>
               <p className="text-zinc-500 text-sm leading-relaxed mb-8 flex-1">
-                Built on Yjs CRDTs with WebRTC transport. No server relay. Share a URL and watch edits merge in real-time with zero conflicts.
+                Built on Yjs CRDTs over WebRTC, so edits travel peer-to-peer once a session is established. Share an invite link and watch changes merge without conflicts.
               </p>
               {/* Transplanted Multiplayer Visual */}
               <div className="h-[120px] rounded-xl bg-[#050505] border border-white/10 relative overflow-hidden shadow-inner flex items-center justify-center">
@@ -484,7 +456,7 @@ export default function LandingPage() {
               <div>
                 <h3 className="text-xl font-bold text-white mb-3">Real-Time Observability</h3>
                 <p className="text-zinc-500 text-sm leading-relaxed mb-6">
-                  Terminal output mimics production observability tools. Watch cascading failures unfold in real-time. Export post-mortem PDFs with root cause analysis automatically.
+                  Watch the run tick by tick as failures cascade, then open a structured report: grade, root cause, per-component risk and the changes to make. Export the whole thing as a PDF.
                 </p>
                 <div className="flex items-center gap-3">
                   <div className="px-3 py-1.5 rounded bg-white/5 border border-white/10 text-xs font-mono text-zinc-400">Deployed</div>
@@ -521,9 +493,9 @@ export default function LandingPage() {
           transition={{ duration: 0.5, ease: 'linear' }} className="mx-auto" style={{ maxWidth: '1840px' }}>
           <div className="grid grid-cols-2 md:grid-cols-4">
             {[
-              { number: '< 50ms', label: 'CRDT Sync\nLatency' },
-              { number: '$0', label: 'Backend\nExecution Cost' },
-              { number: '100%', label: 'Client-Side\nWASM Execution' },
+              { number: 'Rust', label: 'WASM Simulation\nEngine' },
+              { number: 'GNN', label: 'Topology Grading\nModel' },
+              { number: 'CRDT', label: 'Conflict-Free\nLive Editing' },
               { number: 'SHA-256', label: 'Stable Hash\nVerification' }
             ].map((metric, i) => (
               <div key={i} className="text-center border-r py-16 px-8" style={{ borderColor: 'rgba(59,130,246,0.1)' }}>
@@ -572,22 +544,21 @@ export default function LandingPage() {
             <span className="text-blue-500">Crafted Together.</span>
           </motion.h2>
 
-          {/* Waitlist Input Box */}
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }}
-            className="w-full max-w-xl relative flex items-center p-1.5 rounded-2xl border bg-zinc-900/40 backdrop-blur-xl mb-6"
-            style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-            <input type="email" placeholder="Enter your email..." 
-              className="flex-1 bg-transparent border-none outline-none px-6 text-white placeholder-zinc-500 text-lg" />
-            <button onClick={() => navigate('/auth')} className="iz-btn-blue relative overflow-hidden text-white font-semibold rounded-xl px-10 py-3.5 flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)]">
+            className="flex flex-col items-center mb-6">
+            <button
+              onClick={() => navigate('/auth')}
+              className="iz-btn-blue relative overflow-hidden text-white font-semibold rounded-2xl px-12 py-4 flex items-center gap-3 transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] text-lg"
+            >
               <span style={{ position:'absolute', top:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to left, rgba(30,58,138,0), #000000)', animation:'izAnimateTop 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
               <span style={{ position:'absolute', top:0, right:0, height:'100%', width:'2px', background:'linear-gradient(to top, rgba(30,58,138,0), #000000)', animation:'izAnimateRight 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
               <span style={{ position:'absolute', bottom:0, left:0, width:'100%', height:'2px', background:'linear-gradient(to right, rgba(30,58,138,0), #000000)', animation:'izAnimateBottom 2s linear infinite', pointerEvents:'none', zIndex:2 }} />
               <span style={{ position:'absolute', top:0, left:0, height:'100%', width:'2px', background:'linear-gradient(to bottom, rgba(30,58,138,0), #000000)', animation:'izAnimateLeft 2s linear -1s infinite', pointerEvents:'none', zIndex:2 }} />
-              Get Started
+              Start building
               <Send className="w-4 h-4" />
             </button>
           </motion.div>
-          <p className="text-zinc-500 text-sm tracking-wide">Get Early bird discount. Join Now.</p>
+          <p className="text-zinc-500 text-sm tracking-wide">Sign in to save your projects and reports.</p>
         </div>
       </section>
 
@@ -598,32 +569,6 @@ export default function LandingPage() {
           {/* Left: Copyright */}
           <div className="text-zinc-500 text-sm">
             © 2026 InfraZero. All rights reserved.
-          </div>
-
-          {/* Center: Socials */}
-          <div className="flex items-center gap-6">
-            {[
-              { icon: <Twitter className="w-5 h-5" />, label: 'X' },
-              { icon: <div className="font-bold text-lg">D</div>, label: 'Discord' },
-              { icon: <Instagram className="w-5 h-5" />, label: 'Instagram' },
-              { icon: <Mail className="w-5 h-5" />, label: 'Email' }
-            ].map((social, i) => (
-              <a key={i} href="#" className="text-zinc-500 hover:text-white transition-colors" title={social.label}>
-                {social.icon}
-              </a>
-            ))}
-          </div>
-
-          {/* Right: GitHub & Support */}
-          <div className="flex items-center gap-4">
-            <a href="#" className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors border border-white/10 rounded-lg px-3 py-1.5 text-sm font-medium bg-zinc-900/50">
-              <Star className="w-4 h-4" />
-              <span>Star on GitHub</span>
-            </a>
-            <button className="bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg px-4 py-2 text-sm font-semibold transition-all flex items-center gap-2">
-              <Zap className="w-4 h-4" fill="currentColor" />
-              Support Project
-            </button>
           </div>
 
         </div>

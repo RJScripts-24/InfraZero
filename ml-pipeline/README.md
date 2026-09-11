@@ -1,55 +1,74 @@
 # InfraZero ML Pipeline
 
+The pipeline that trains InfraZero's **architecture grader** — a graph neural
+network that scores a microservice topology's reliability risk from its shape
+alone, learned from Alibaba production call traces.
+
+Full documentation: **[`microservices/README.md`](microservices/README.md)**
+
 ## Setup
 
-1. Install Python dependencies:
-   cd scraper && pip install -r requirements.txt
-   cd ../ghosttrace && pip install -r requirements.txt
+```bash
+pip install -r ghosttrace/requirements.txt
+```
 
-2. Install Node dependencies (for synthetic data generation):
-   npm install
+## Running the pipeline
 
-3. Create your environment file:
-   cp .env.example .env
-   Then open .env and paste your GitHub token into GITHUB_TOKEN=
+The Alibaba traces are not in this repository. Download the call-graph tarballs
+into a directory outside the OneDrive-synced repo, then point the pipeline at it
+with `INFRAZERO_TRACE_DIR` (default `C:/Users/rkj24/infrazero-traces`):
 
-   To get a GitHub token:
-   - Go to github.com -> Settings -> Developer settings
-   - Personal access tokens -> Tokens (classic) -> Generate new token
-   - Select scope: public_repo only
-   - Copy the token and paste it into .env
+```bash
+# 1. Traces -> labelled architectures  (streams tarballs, bounded memory)
+python -m microservices.build_dataset
 
-## Running the Full Pipeline
+# 2. Pick the label estimator on evidence (optional but recommended)
+python -m microservices.sweep_labels
 
-Step 1 -- Generate synthetic labeled graphs:
-   node collect/generate_dataset.js
+# 3. Train, holding out a test split that evaluation reads exactly once
+python -m microservices.train --cross-validate
 
-Step 2 -- Scrape real architecture diagrams from GitHub:
-   python scraper/scrape_github.py
+# 4. Held-out test report + figures + baseline comparisons
+python -m microservices.evaluate
 
-Step 3 -- Parse .excalidraw files into graph JSON:
-   python scraper/parse_excalidraw.py
+# 5. Serve the grader to the InfraZero backend on port 8001
+python ghosttrace/inference_server.py
+```
 
-Step 4 -- Label all graphs with anomaly classes:
-   python scraper/label_graphs.py
+Regression tests for the canvas / vision transfer path:
 
-Step 5 -- Augment the dataset:
-   python scraper/augment_graphs.py
+```bash
+python -m microservices.test_transfer
+```
 
-Step 6 -- Train the GNN model:
-   python ghosttrace/graph_encoder.py
+## Output locations
 
-Step 7 -- Generate synthetic OTel traces:
-   python ghosttrace/trace_synthesizer.py
+| path | contents |
+|------|----------|
+| `data/microservices/shards/` | per-tarball intermediate architecture shards |
+| `data/microservices/architectures.jsonl` | the labelled dataset — all training needs |
+| `data/microservices/dataset_stats.json` | class balance, tercile cuts, label definition |
+| `ghosttrace/ghosttrace_gnn.pt` | trained checkpoint (+ frozen split indices) |
+| `ghosttrace/training_history.json` | per-epoch loss, accuracy, train/val gap |
+| `ghosttrace/evaluation/` | `metrics_report.json` and figures |
 
-## Output Locations
-- Raw scraped files:   data/raw/
-- Graph JSONs:         data/graphs/
-- OTel traces:         data/traces/
-- Trained model:       ghosttrace/ghosttrace_gnn.pt
+Once `architectures.jsonl` exists the raw traces can be deleted — nothing
+downstream reads them. Keep `shards/` if you may want to re-cut labels at a
+different quantile; re-merging from shards takes seconds.
+
+## Superseded work
+
+`_archive_pre_microservices/` holds the previous iteration: the scraped-Excalidraw
+and benchmark-repository graph dataset, its binary `stable`/`unstable` GATv2
+model, and that model's evaluation output. It is kept for comparison and is not
+read by anything.
+
+The scrapers that produced it (`scraper/`, `collect/`) are likewise unused by the
+current pipeline. They remain in the tree because they are independently useful
+for gathering architecture diagrams, not because the grader depends on them.
 
 ## Notes
-- Never commit your .env file or the data/ directory
-- The trained model (ghosttrace_gnn.pt) is also gitignored - regenerate it locally
-- For the research paper evaluation, also download TrainTicket and DeathStarBench
-  from GitHub and place their architecture JSONs into data/graphs/ before Step 4
+
+- Never commit `.env` or `data/`.
+- `trace_synthesizer.py` generates synthetic OpenTelemetry spans by walking
+  topology paths. It is independent of the grader and still usable on its own.

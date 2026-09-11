@@ -1,8 +1,7 @@
 // backend/src/controllers/ai.controller.ts
 import { Request, Response, NextFunction } from 'express';
-import { generateArchitectureFromPrompt } from '../services/groq.service';
+import { generateArchitectureFromPrompt, createVisionCompletionWithFallback } from '../services/groq.service';
 import { AI_RATE_LIMITS } from '../config/constants';
-import { env } from '../config/env';
 import { logger } from '../utils/logger';
 
 /**
@@ -59,6 +58,93 @@ export const generateArchitecture = async (
     }
 };
 
+/**
+ * Canonical component types the FlowCanvas ICON_MAP can render.
+ * Vision models drift off the prompt's allowed list (observed: "Actor", "Client",
+ * "Network"), and an unknown type renders a node with no icon, so map to the
+ * nearest renderable type and fall back to "Node Service".
+ */
+const VISION_NODE_TYPES = [
+    'Infrastructure',
+    'Gateway',
+    'Node Service',
+    'Database',
+    'Cache',
+    'RabbitMQ',
+    'Background Job',
+    'Edge Network',
+] as const;
+
+const VISION_TYPE_ALIASES: Record<string, string> = {
+    'load balancer': 'Infrastructure',
+    loadbalancer: 'Infrastructure',
+    lb: 'Infrastructure',
+    network: 'Infrastructure',
+    proxy: 'Infrastructure',
+    'reverse proxy': 'Infrastructure',
+    nginx: 'Infrastructure',
+
+    'api gateway': 'Gateway',
+    apigateway: 'Gateway',
+    api: 'Gateway',
+    ingress: 'Gateway',
+
+    service: 'Node Service',
+    microservice: 'Node Service',
+    server: 'Node Service',
+    'app server': 'Node Service',
+    application: 'Node Service',
+    app: 'Node Service',
+    backend: 'Node Service',
+    frontend: 'Node Service',
+    client: 'Node Service',
+    actor: 'Node Service',
+    user: 'Node Service',
+    compute: 'Node Service',
+    lambda: 'Node Service',
+    function: 'Node Service',
+    container: 'Node Service',
+
+    db: 'Database',
+    postgresql: 'Database',
+    postgres: 'Database',
+    mysql: 'Database',
+    mongodb: 'Database',
+    mongo: 'Database',
+    storage: 'Database',
+    s3: 'Database',
+    datastore: 'Database',
+
+    redis: 'Cache',
+    memcached: 'Cache',
+
+    queue: 'RabbitMQ',
+    'message queue': 'RabbitMQ',
+    kafka: 'RabbitMQ',
+    broker: 'RabbitMQ',
+    sqs: 'RabbitMQ',
+    'event bus': 'RabbitMQ',
+
+    worker: 'Background Job',
+    job: 'Background Job',
+    cron: 'Background Job',
+    batch: 'Background Job',
+
+    cdn: 'Edge Network',
+    edge: 'Edge Network',
+    cloudfront: 'Edge Network',
+};
+
+const normaliseNodeType = (raw: unknown): string => {
+    if (typeof raw !== 'string' || !raw.trim()) return 'Node Service';
+
+    const value = raw.trim();
+    const exact = VISION_NODE_TYPES.find((t) => t.toLowerCase() === value.toLowerCase());
+    if (exact) return exact;
+
+    return VISION_TYPE_ALIASES[value.toLowerCase()] ?? 'Node Service';
+};
+
 export const analyseArchitectureImage = async (
     req: Request, res: Response, next: NextFunction
 ): Promise<void> => {
@@ -97,10 +183,7 @@ RULES:
 - Extract every visible component - do not skip any box or shape you can see
 - If you cannot identify a component type, use "Node Service"`;
 
-        const groq = new (await import('groq-sdk')).default({ apiKey: env.GROQ_API_KEY });
-
-        const completion = await groq.chat.completions.create({
-            model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        const completion = await createVisionCompletionWithFallback({
             messages: [
                 {
                     role: 'user',
@@ -119,7 +202,9 @@ RULES:
                 },
             ],
             temperature: 0.1,
-            max_tokens: 2000,
+            // Groq counts prompt + max_tokens against the 8k tokens-per-minute quota, and a
+            // diagram image alone costs ~2k, so this ceiling has to leave room for the image.
+            max_tokens: 3000,
             response_format: { type: 'json_object' },
         });
 
@@ -226,7 +311,7 @@ RULES:
             position: { x: toNum(n.x, 200), y: toNum(n.y, 200) },
             data: {
                 label: n.label || 'Unknown',
-                type: n.type || 'Node Service',
+                type: normaliseNodeType(n.type),
                 isActive: false,
             },
         }));

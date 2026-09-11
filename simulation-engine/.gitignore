@@ -106,3 +106,24 @@ flamegraph.svg
 *.tar.gz
 *.tgz
 *.rar
+
+# ...but the built WASM package IS committed, deliberately.
+#
+# The backend loads `pkg/infrazero_simulation_engine.js` at runtime, so a clone
+# without it cannot run the simulation at all -- and rebuilding needs the Rust
+# toolchain plus wasm-pack, which a reviewer cloning the repo will not have.
+# The package is ~350KB.
+#
+# It cannot be re-included with a negation here: wasm-pack regenerates
+# `pkg/.gitignore` containing `*` on every build, and a nested .gitignore wins.
+# The five files were therefore added once with `git add -f`, and because
+# .gitignore does not apply to already-tracked files, later rebuilds show up as
+# ordinary modifications with no further flags.
+#
+# To re-add after a change of crate name or a fresh clone:
+#   git add -f pkg/infrazero_simulation_engine.js #              pkg/infrazero_simulation_engine.d.ts #              pkg/infrazero_simulation_engine_bg.wasm #              pkg/infrazero_simulation_engine_bg.wasm.d.ts #              pkg/package.json
+#
+# This exception exists because the rules above had already caused the bug it
+# now prevents: the only pkg files ever committed were an OLD build under the
+# previous crate name, so a fresh clone silently ran a stale engine with none
+# of the queueing behaviour.

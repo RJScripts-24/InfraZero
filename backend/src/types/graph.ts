@@ -17,7 +17,31 @@ export interface NodeData {
   label: string;
   type: ValidNodeType; // Strictly typed to the constants array (e.g., 'Gateway', 'PostgreSQL')
   isActive: boolean;
-  
+
+  /**
+   * How many instances this box represents. Defaults to 1.
+   *
+   * An architecture diagram draws *tiers*, not instances: one box labelled
+   * "API Gateway" usually stands for a fleet. Without this the analysis has to
+   * treat every component as a singleton, which makes a correctly replicated
+   * tier read as a single point of failure and a serial chain of replicated
+   * tiers look more fragile than a wide fan-out of single services.
+   *
+   * Kubernetes states it as `spec.replicas`, so a repo import fills it in
+   * automatically rather than asking the user to guess.
+   */
+  replicas?: number;
+
+  /**
+   * Requests per second this component is expected to serve at peak.
+   *
+   * Only meaningful on entry points. Supplied by the user so the simulation
+   * runs at *their* load instead of an arbitrary reference, which is the
+   * difference between "saturates at 800 rps" (a number about nothing) and
+   * "saturates below your stated 5,000 rps peak".
+   */
+  expectedPeakRps?: number;
+
   // Optional hardware properties for the WASM simulation engine
   processingPowerMs?: number;
   coldStartLatencyMs?: number;
@@ -52,6 +76,17 @@ export interface CustomEdge {
   sourceHandle?: string; // The specific connection port (e.g., 'bottom')
   targetHandle?: string; // The specific connection port (e.g., 'top')
   
+  /**
+   * What kind of call this edge carries.
+   *
+   * The distinction the analysis most needs and previously could not see:
+   * a `write` to a shared store contends where a `read` can be cached, and an
+   * `async` handoff means the caller does not wait for the callee at all. An
+   * edge with no kind is treated as a synchronous call, which is the
+   * conservative reading.
+   */
+  callKind?: 'read' | 'write' | 'async';
+
   // Optional network properties for the WASM simulation engine
   latencyMs?: number;
   jitterMs?: number;

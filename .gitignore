@@ -1,0 +1,46 @@
+# InfraZero -- repository root
+#
+# Allowlist rather than blocklist: everything at the root is ignored, and the
+# four source directories are then un-ignored explicitly. A blocklist quietly
+# admits every new file dropped at the root; this admits nothing that was not
+# named on purpose.
+#
+# Each of the four directories keeps its own .gitignore for what should not be
+# committed from inside it (node_modules, .env, build output, datasets, model
+# checkpoints). Those still apply -- this file only decides what is considered
+# at all.
+
+# 1. Ignore everything at the repository root.
+/*
+
+# 2. Re-admit this file, so the rule set is itself versioned.
+!/.gitignore
+
+# 3. Re-admit the four source directories.
+!/backend/
+!/frontend/
+!/ml-pipeline/
+!/simulation-engine/
+
+# ---------------------------------------------------------------------------
+# What the rule above deliberately excludes, and why
+#
+#   cluster-trace-microservices-v2021/    Alibaba's own fetch scripts. The
+#   cluster-trace-microservices-v2022/    traces themselves are ~2TB and are
+#                                         downloaded, never committed.
+#   data/                                 Working data outside the pipeline.
+#   output.txt                            Scratch output.
+#   *.md at the root                      Project write-ups; the code
+#                                         directories carry their own READMEs.
+#   .sixth                                Editor/tool state.
+# ---------------------------------------------------------------------------
+
+# Local environment and editor state, wherever they appear.
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

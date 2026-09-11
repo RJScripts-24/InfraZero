@@ -15,7 +15,12 @@ interface EnvConfig {
     GROQ_API_KEY: string;
     DATABASE_URL: string;
     DATABASE_SSL: boolean;
-    WEBHOOK_SECRET: string; // Used to verify auth webhooks
+    WEBHOOK_SECRET: string; // Also the signing secret for app session tokens
+    /** Google OAuth client id. Sign-in returns 503 until this is set. */
+    GOOGLE_CLIENT_ID: string;
+    /** GitHub OAuth app credentials. Sign-in returns 503 until both are set. */
+    GITHUB_CLIENT_ID: string;
+    GITHUB_CLIENT_SECRET: string;
 }
 
 /**
@@ -51,6 +56,12 @@ const validateEnv = (): EnvConfig => {
         DATABASE_URL: process.env.DATABASE_URL!,
         DATABASE_SSL: process.env.DATABASE_SSL !== 'false',
         WEBHOOK_SECRET: process.env.WEBHOOK_SECRET!,
+
+        // Optional: each provider's sign-in route reports its own absence with a
+        // 503 rather than crashing the whole server at boot.
+        GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+        GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID || '',
+        GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET || '',
     };
 };
 

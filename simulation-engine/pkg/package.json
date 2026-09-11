@@ -1,0 +1,16 @@
+{
+  "name": "infrazero-simulation-engine",
+  "type": "module",
+  "description": "Deterministic WebAssembly simulation engine for InfraZero",
+  "version": "1.0.0",
+  "files": [
+    "infrazero_simulation_engine_bg.wasm",
+    "infrazero_simulation_engine.js",
+    "infrazero_simulation_engine.d.ts"
+  ],
+  "main": "infrazero_simulation_engine.js",
+  "types": "infrazero_simulation_engine.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
